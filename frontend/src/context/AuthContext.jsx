@@ -51,6 +51,12 @@ export function AuthProvider({ children }) {
     return response.data;
   };
 
+  const updateProfile = async (updates) => {
+    const response = await apiRequest('/auth/me', { method: 'PATCH', body: JSON.stringify(updates) });
+    setUser(response.data);
+    return response.data;
+  };
+
   const logout = () => {
     localStorage.removeItem('farmshield_token');
     setUser(null);
