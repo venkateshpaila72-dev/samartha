@@ -8,6 +8,7 @@ from fastapi import (
     APIRouter,
     Depends,
     File,
+    Form,
     HTTPException,
     Response,
     UploadFile,
@@ -59,6 +60,7 @@ class TranscriptionResponse(BaseModel):
 )
 async def transcribe_audio_file(
     file: Optional[UploadFile] = File(None),
+    language: Optional[str] = Form(None),
     current_user=Depends(get_current_user),
 ):
     if file is None:
@@ -104,10 +106,8 @@ async def transcribe_audio_file(
         else getattr(current_user, "preferred_language", "en")
     )
 
-    lang_code = SUPPORTED_SPEECH_LANGUAGES.get(
-        preferred_language,
-        "en-IN",
-    )
+    req_lang = (language or preferred_language or "en").lower().split("-")[0]
+    lang_code = SUPPORTED_SPEECH_LANGUAGES.get(req_lang, "en-IN")
 
     try:
         transcript, confidence = await AzureSpeechClient.transcribe_audio(
@@ -142,7 +142,7 @@ async def transcribe_audio_file(
 
 
 class SynthesizeRequest(BaseModel):
-    text: str = Field(min_length=1, max_length=3000)
+    text: str = Field(min_length=1, max_length=10000)
     language: Optional[str] = "en"
 
 

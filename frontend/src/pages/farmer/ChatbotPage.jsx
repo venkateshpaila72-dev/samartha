@@ -47,14 +47,18 @@ export default function ChatbotPage({ activeBatch }) {
 
   // Audio / Speech-to-Text & Text-to-Speech State
   const [speakingMessageId, setSpeakingMessageId] = useState(null);
+  const [loadingSpeechMessageId, setLoadingSpeechMessageId] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [speechError, setSpeechError] = useState(null);
 
   const messagesEndRef = useRef(null);
   const activeAudioRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordTimerRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   const suggestedQuestions = [
     { label: '🌦️ 7-Day Weather Forecast', text: 'What is the 7-day weather forecast and rain probability for my farm?' },
@@ -64,17 +68,23 @@ export default function ChatbotPage({ activeBatch }) {
     { label: '📅 Plan Wheat Harvest Date', text: 'I want to harvest my wheat on October 18.' },
   ];
 
-  // Stop any active audio playback
+  // Stop any active audio playback immediately
   const stopSpeaking = () => {
     if (activeAudioRef.current) {
       activeAudioRef.current.pause();
+      activeAudioRef.current.currentTime = 0;
       activeAudioRef.current = null;
     }
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
     }
     setSpeakingMessageId(null);
+    setLoadingSpeechMessageId(null);
   };
+
+  useEffect(() => {
+    stopSpeaking();
+  }, [currentConvoId, chatLang]);
 
   useEffect(() => {
     async function loadConversations() {
@@ -190,73 +200,106 @@ export default function ChatbotPage({ activeBatch }) {
     }
   };
 
+  const langCodes = {
+    en: 'en-IN',
+    hi: 'hi-IN',
+    te: 'te-IN',
+    ta: 'ta-IN',
+    kn: 'kn-IN',
+    mr: 'mr-IN',
+    pa: 'pa-IN',
+    bn: 'bn-IN',
+  };
+
+  const cleanSpeechText = (rawText) => {
+    if (!rawText) return '';
+    return rawText
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/\{[\s\S]*?\}/g, ' ')
+      .replace(/^\|.*\|$/gm, ' ')
+      .replace(/\n*###?\s*Referenced Sources[\s\S]*$/gi, '')
+      .replace(/\n*Referenced Sources:[\s\S]*$/gi, '')
+      .replace(/https?:\/\/\S+/g, '')
+      .replace(/[*#_`>~\[\]]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   // Text-To-Speech Playback with Azure Neural TTS & Browser Native Fallback
   const handleToggleSpeak = async (messageId, text) => {
-    if (speakingMessageId === messageId) {
+    if (speakingMessageId === messageId || loadingSpeechMessageId === messageId) {
       stopSpeaking();
       return;
     }
 
     stopSpeaking();
-    setSpeakingMessageId(messageId);
+    setLoadingSpeechMessageId(messageId);
+    setSpeechError(null);
 
-    // Clean markdown and symbol characters for smooth speech
-    const cleanSpeechText = text
-      .replace(/[*#_`>~]/g, '')
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-      .replace(/https?:\/\/\S+/g, '')
-      .trim();
+    const cleanText = cleanSpeechText(text);
+    if (!cleanText) {
+      setLoadingSpeechMessageId(null);
+      return;
+    }
 
     try {
       // 1. Attempt Azure Neural Text-to-Speech via backend
-      const audioBlob = await speechService.synthesizeSpeech(cleanSpeechText, chatLang);
+      const audioBlob = await speechService.synthesizeSpeech(cleanText, chatLang);
       const audioUrl = URL.createObjectURL(audioBlob);
       const audio = new Audio(audioUrl);
 
+      audio.onplay = () => {
+        setLoadingSpeechMessageId(null);
+        setSpeakingMessageId(messageId);
+      };
+
       audio.onended = () => {
         setSpeakingMessageId(null);
+        setLoadingSpeechMessageId(null);
         URL.revokeObjectURL(audioUrl);
       };
 
       audio.onerror = () => {
-        fallbackBrowserSpeech(cleanSpeechText);
+        URL.revokeObjectURL(audioUrl);
+        fallbackBrowserSpeech(cleanText, messageId);
       };
 
       activeAudioRef.current = audio;
       await audio.play();
     } catch (err) {
-      console.warn('Azure TTS endpoint unavailable or unconfigured, using browser speech:', err.message);
-      fallbackBrowserSpeech(cleanSpeechText);
+      console.warn('Azure TTS endpoint unavailable, falling back to browser speech:', err.message);
+      fallbackBrowserSpeech(cleanText, messageId);
     }
   };
 
-  const fallbackBrowserSpeech = (cleanText) => {
+  const fallbackBrowserSpeech = (cleanText, messageId) => {
     if (!window.speechSynthesis) {
       setSpeakingMessageId(null);
+      setLoadingSpeechMessageId(null);
+      setSpeechError('Text-to-speech is not supported in this browser.');
       return;
     }
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(cleanText);
 
-    const langCodes = {
-      en: 'en-IN',
-      hi: 'hi-IN',
-      te: 'te-IN',
-      ta: 'ta-IN',
-      kn: 'kn-IN',
-      mr: 'mr-IN',
-      pa: 'pa-IN',
-      bn: 'bn-IN',
-    };
     utterance.lang = langCodes[chatLang] || 'en-IN';
     utterance.rate = 0.95;
 
+    utterance.onstart = () => {
+      setLoadingSpeechMessageId(null);
+      setSpeakingMessageId(messageId);
+    };
+
     utterance.onend = () => {
       setSpeakingMessageId(null);
+      setLoadingSpeechMessageId(null);
     };
-    utterance.onerror = () => {
+
+    utterance.onerror = (e) => {
+      console.warn('Browser speech synthesis error:', e);
       setSpeakingMessageId(null);
+      setLoadingSpeechMessageId(null);
     };
 
     window.speechSynthesis.speak(utterance);
@@ -265,8 +308,63 @@ export default function ChatbotPage({ activeBatch }) {
   // Voice Input (Speech-to-Text Microphone Recording)
   const startRecording = async () => {
     stopSpeaking();
+    setSpeechError(null);
+
+    // Prefer Web Speech API if supported in browser for real-time transcription
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+      try {
+        const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        recognition.lang = langCodes[chatLang] || 'en-IN';
+        recognition.continuous = false;
+        recognition.interimResults = false;
+
+        recognition.onstart = () => {
+          setIsRecording(true);
+          setRecordingSeconds(0);
+          recordTimerRef.current = setInterval(() => {
+            setRecordingSeconds((prev) => prev + 1);
+          }, 1000);
+        };
+
+        recognition.onresult = (event) => {
+          const transcript = event.results[0]?.[0]?.transcript;
+          if (transcript) {
+            setInputMessage((prev) => (prev ? `${prev} ${transcript}` : transcript));
+          }
+        };
+
+        recognition.onerror = (event) => {
+          console.warn('Web Speech recognition notice:', event.error);
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            setSpeechError('Microphone permission was denied. Please allow microphone access in your browser.');
+          } else if (event.error !== 'no-speech') {
+            startMediaRecorderFallback();
+          }
+        };
+
+        recognition.onend = () => {
+          setIsRecording(false);
+          clearInterval(recordTimerRef.current);
+          recognitionRef.current = null;
+        };
+
+        recognition.start();
+        return;
+      } catch (e) {
+        console.warn('Could not initialize Web Speech, falling back to MediaRecorder:', e);
+      }
+    }
+
+    // MediaRecorder + Backend Azure/Whisper fallback
+    await startMediaRecorderFallback();
+  };
+
+  const startMediaRecorderFallback = async () => {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('Microphone access is not supported in this browser.');
+      setSpeechError('Microphone access is not supported in this browser.');
       return;
     }
 
@@ -274,7 +372,13 @@ export default function ChatbotPage({ activeBatch }) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
 
-      const mediaRecorder = new MediaRecorder(stream);
+      const options = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? { mimeType: 'audio/webm;codecs=opus' }
+        : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+        ? { mimeType: 'audio/ogg;codecs=opus' }
+        : {};
+
+      const mediaRecorder = new MediaRecorder(stream, options);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
@@ -284,18 +388,28 @@ export default function ChatbotPage({ activeBatch }) {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
         stream.getTracks().forEach((track) => track.stop());
+        const mimeType = mediaRecorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
 
-        // Call backend speech transcription
+        if (audioBlob.size < 400) {
+          return;
+        }
+
+        setIsTranscribing(true);
         try {
-          const file = new File([audioBlob], 'voice_query.wav', { type: 'audio/wav' });
-          const res = await speechService.transcribeAudio(file);
+          const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+          const file = new File([audioBlob], `voice_query.${ext}`, { type: mimeType });
+          const res = await speechService.transcribeAudio(file, chatLang);
           if (res?.transcript) {
-            setInputMessage(res.transcript);
+            setInputMessage((prev) => (prev ? `${prev} ${res.transcript}` : res.transcript));
+            setSpeechError(null);
           }
         } catch (err) {
-          console.warn('Voice transcription notice:', err.message);
+          console.warn('Voice transcription error:', err.message);
+          setSpeechError(err.message || 'Could not recognize speech. Please try speaking again.');
+        } finally {
+          setIsTranscribing(false);
         }
       };
 
@@ -306,16 +420,28 @@ export default function ChatbotPage({ activeBatch }) {
         setRecordingSeconds((prev) => prev + 1);
       }, 1000);
     } catch (err) {
-      alert('Could not access microphone: ' + (err.message || 'Permission denied'));
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setSpeechError('Microphone permission was denied. Please allow microphone access in your browser settings.');
+      } else {
+        setSpeechError(`Could not access microphone: ${err.message || 'Unknown error'}`);
+      }
     }
   };
 
   const stopRecording = () => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        // ignore
+      }
+      recognitionRef.current = null;
+    }
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      clearInterval(recordTimerRef.current);
     }
+    setIsRecording(false);
+    clearInterval(recordTimerRef.current);
   };
 
   useEffect(() => {
@@ -410,6 +536,7 @@ export default function ChatbotPage({ activeBatch }) {
           {messages.map((m, idx) => {
             const isBot = m.role === 'assistant';
             const isSpeaking = speakingMessageId === m.message_id;
+            const isLoadingSpeech = loadingSpeechMessageId === m.message_id;
 
             return (
               <div
@@ -452,11 +579,17 @@ export default function ChatbotPage({ activeBatch }) {
                   {isBot && m.content && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
                       <button
-                        onClick={() => handleToggleSpeak(m.message_id, m.content)}
+                        onClick={() => {
+                          if (isSpeaking || isLoadingSpeech) {
+                            stopSpeaking();
+                          } else {
+                            handleToggleSpeak(m.message_id, m.content);
+                          }
+                        }}
                         style={{
-                          background: isSpeaking ? 'rgba(239, 68, 68, 0.2)' : 'rgba(56, 189, 248, 0.15)',
-                          border: isSpeaking ? '1px solid rgba(239, 68, 68, 0.4)' : '1px solid rgba(56, 189, 248, 0.3)',
-                          color: isSpeaking ? '#f87171' : '#38bdf8',
+                          background: isSpeaking ? 'rgba(239, 68, 68, 0.2)' : isLoadingSpeech ? 'rgba(245, 158, 11, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+                          border: isSpeaking ? '1px solid rgba(239, 68, 68, 0.4)' : isLoadingSpeech ? '1px solid rgba(245, 158, 11, 0.4)' : '1px solid rgba(56, 189, 248, 0.3)',
+                          color: isSpeaking ? '#f87171' : isLoadingSpeech ? '#fbbf24' : '#38bdf8',
                           padding: '4px 10px',
                           borderRadius: '6px',
                           fontSize: '0.78rem',
@@ -465,9 +598,13 @@ export default function ChatbotPage({ activeBatch }) {
                           alignItems: 'center',
                           gap: '5px'
                         }}
-                        title={isSpeaking ? 'Stop voice playback' : 'Read message aloud in selected language'}
+                        title={isSpeaking ? 'Stop voice playback' : isLoadingSpeech ? 'Generating speech...' : 'Read message aloud in selected language'}
                       >
-                        {isSpeaking ? (
+                        {isLoadingSpeech ? (
+                          <>
+                            <RefreshCw size={13} className="spin" /> Generating speech...
+                          </>
+                        ) : isSpeaking ? (
                           <>
                             <VolumeX size={13} /> Stop Speaking
                           </>
@@ -635,6 +772,30 @@ export default function ChatbotPage({ activeBatch }) {
 
         {/* Input Bar with Microphone Voice & Send */}
         <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(15, 23, 42, 0.7)' }}>
+          {speechError && (
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#f87171',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              fontSize: '0.82rem',
+              marginBottom: '10px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span>{speechError}</span>
+              <button
+                type="button"
+                onClick={() => setSpeechError(null)}
+                style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+          )}
+
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -645,21 +806,22 @@ export default function ChatbotPage({ activeBatch }) {
             <input
               type="text"
               className="input-field"
-              placeholder={isRecording ? `Listening... (${recordingSeconds}s)` : "Ask FarmShield about storage, weather, mandi selling, or schedule harvest..."}
+              placeholder={isRecording ? `Listening... (${recordingSeconds}s)` : isTranscribing ? "Transcribing speech..." : "Ask FarmShield about storage, weather, mandi selling, or schedule harvest..."}
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              disabled={sending || isRecording}
+              disabled={sending || isRecording || isTranscribing}
               style={{ flex: 1 }}
             />
 
             {/* Microphone Button */}
             <button
               type="button"
+              disabled={sending || isTranscribing}
               onClick={isRecording ? stopRecording : startRecording}
               style={{
-                background: isRecording ? 'rgba(239, 68, 68, 0.25)' : 'rgba(56, 189, 248, 0.15)',
-                border: isRecording ? '1px solid #ef4444' : '1px solid rgba(56, 189, 248, 0.3)',
-                color: isRecording ? '#ef4444' : '#38bdf8',
+                background: isRecording ? 'rgba(239, 68, 68, 0.25)' : isTranscribing ? 'rgba(245, 158, 11, 0.2)' : 'rgba(56, 189, 248, 0.15)',
+                border: isRecording ? '1px solid #ef4444' : isTranscribing ? '1px solid #f59e0b' : '1px solid rgba(56, 189, 248, 0.3)',
+                color: isRecording ? '#ef4444' : isTranscribing ? '#fbbf24' : '#38bdf8',
                 borderRadius: '8px',
                 padding: '10px 14px',
                 cursor: 'pointer',
@@ -668,11 +830,15 @@ export default function ChatbotPage({ activeBatch }) {
                 gap: '6px',
                 fontSize: '0.85rem'
               }}
-              title={isRecording ? 'Stop recording voice' : 'Ask question by voice (Speech-to-Text)'}
+              title={isRecording ? 'Stop recording voice' : isTranscribing ? 'Transcribing speech...' : 'Ask question by voice (Speech-to-Text)'}
             >
               {isRecording ? (
                 <>
                   <MicOff size={18} className="pulse" /> Stop ({recordingSeconds}s)
+                </>
+              ) : isTranscribing ? (
+                <>
+                  <RefreshCw size={18} className="spin" /> Transcribing...
                 </>
               ) : (
                 <Mic size={18} />
@@ -681,7 +847,7 @@ export default function ChatbotPage({ activeBatch }) {
 
             <button
               type="submit"
-              disabled={sending || !inputMessage.trim()}
+              disabled={sending || isRecording || isTranscribing || !inputMessage.trim()}
               className="btn-primary"
               style={{ padding: '10px 20px' }}
             >

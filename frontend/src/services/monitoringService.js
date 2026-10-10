@@ -117,9 +117,12 @@ export const speechService = {
     return blob;
   },
 
-  async transcribeAudio(file) {
+  async transcribeAudio(file, language = 'en') {
     const formData = new FormData();
     formData.append('file', file);
+    if (language) {
+      formData.append('language', language);
+    }
     const res = await apiRequest('/speech/transcribe', {
       method: 'POST',
       body: formData,
