@@ -54,6 +54,9 @@ class MonitoringService:
             "relative_humidity_percent": payload.relative_humidity_percent,
             "crop_moisture_percent": payload.crop_moisture_percent,
             "co2_ppm": payload.co2_ppm,
+            "air_velocity_m_s": payload.air_velocity_m_s,
+            "pressure_kpa": payload.pressure_kpa,
+            "light_lux": payload.light_lux,
             "sensor_id": payload.sensor_id,
             "provenance": payload.provenance,
             "timestamp": now_iso,
@@ -80,6 +83,9 @@ class MonitoringService:
                     "relative_humidity_percent": payload.relative_humidity_percent,
                     "crop_moisture_percent": payload.crop_moisture_percent,
                     "co2_ppm": payload.co2_ppm,
+                    "air_velocity_m_s": payload.air_velocity_m_s,
+                    "pressure_kpa": payload.pressure_kpa,
+                    "light_lux": payload.light_lux,
                     "timestamp": now_iso,
                     "is_temperature_safe": is_t_safe,
                     "is_humidity_safe": is_rh_safe,
@@ -180,6 +186,7 @@ class MonitoringService:
                     unit=alert_doc.get("unit", ""),
                     recommended_action=alert_doc.get("recommended_action", ""),
                     batch_id=batch_id,
+                    preferred_language=owner.get("preferred_language", "en"),
                 )
                 if success:
                     AlertRepository.update(alert_doc["alert_id"], {"whatsapp_notified": True})
@@ -219,6 +226,10 @@ class MonitoringService:
             current_temperature_c=latest.get("temperature_c") if latest else None,
             current_humidity_percent=latest.get("relative_humidity_percent") if latest else None,
             current_moisture_percent=latest.get("crop_moisture_percent") if latest else None,
+            current_co2_ppm=latest.get("co2_ppm") if latest else None,
+            current_air_velocity_m_s=latest.get("air_velocity_m_s") if latest else None,
+            current_pressure_kpa=latest.get("pressure_kpa") if latest else None,
+            current_light_lux=latest.get("light_lux") if latest else None,
             target_temperature_min_c=crop_profile.get("recommended_temperature_min_c", 15.0),
             target_temperature_max_c=crop_profile.get("recommended_temperature_max_c", 25.0),
             target_humidity_min_percent=crop_profile.get("recommended_relative_humidity_min_percent", 50.0),
