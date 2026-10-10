@@ -34,6 +34,9 @@ class UserOut(BaseModel):
     preferred_language: str
     phone_number: Optional[str] = None
     village_or_location: Optional[str] = None
+    selected_crop: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
     created_at: Optional[str] = None
 
 
@@ -43,6 +46,9 @@ class UserUpdate(BaseModel):
     preferred_language: Optional[str] = Field(default=None, pattern="^(en|hi|te|ta|kn|mr|pa|bn)$")
     phone_number: Optional[str] = None
     village_or_location: Optional[str] = None
+    selected_crop: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    state: Optional[str] = Field(default=None, max_length=100)
+    district: Optional[str] = Field(default=None, max_length=100)
 
 
 Token.model_rebuild()
