@@ -303,8 +303,8 @@ export async function apiRequest(endpoint, options = {}) {
     throw new Error(errorMessage);
   }
 
-  // Translation results must not be translated a second time.
-  if (!endpoint.startsWith("/translation")) {
+  // Translation and speech results must not be translated a second time.
+  if (!endpoint.startsWith("/translation") && !endpoint.startsWith("/speech")) {
     return translateApiData(data);
   }
 

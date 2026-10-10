@@ -3,19 +3,70 @@ import { apiRequest } from './apiClient';
 const BASE_URL =
   import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
-let currentAudioInstance = null;
+export const SUPPORTED_LANGUAGES = [
+  { code: 'en', label: 'English', native: 'English', locale: 'en-IN', voice: 'en-IN-NeerjaNeural' },
+  { code: 'hi', label: 'Hindi', native: 'हिन्दी', locale: 'hi-IN', voice: 'hi-IN-SwaraNeural' },
+  { code: 'te', label: 'Telugu', native: 'తెలుగు', locale: 'te-IN', voice: 'te-IN-ShrutiNeural' },
+  { code: 'ta', label: 'Tamil', native: 'தமிழ்', locale: 'ta-IN', voice: 'ta-IN-PallaviNeural' },
+  { code: 'kn', label: 'Kannada', native: 'ಕನ್ನಡ', locale: 'kn-IN', voice: 'kn-IN-SapnaNeural' },
+  { code: 'mr', label: 'Marathi', native: 'मराठी', locale: 'mr-IN', voice: 'mr-IN-AarohiNeural' },
+  { code: 'bn', label: 'Bengali', native: 'বাংলা', locale: 'bn-IN', voice: 'bn-IN-TanishaaNeural' },
+  { code: 'gu', label: 'Gujarati', native: 'ગુજરાતી', locale: 'gu-IN', voice: 'gu-IN-DhwaniNeural' },
+  { code: 'pa', label: 'Punjabi', native: 'ਪੰਜਾਬੀ', locale: 'pa-IN', voice: 'pa-IN-OjasNeural' },
+];
 
-class VoiceRecorder {
+export const LOCALE_MAP = {
+  en: 'en-IN',
+  hi: 'hi-IN',
+  te: 'te-IN',
+  ta: 'ta-IN',
+  kn: 'kn-IN',
+  mr: 'mr-IN',
+  bn: 'bn-IN',
+  gu: 'gu-IN',
+  pa: 'pa-IN',
+};
+
+let currentAudioInstance = null;
+let activeRecognition = null;
+
+/**
+ * Strips markdown symbols, asterisks, hashes, and links to make text natural for TTS speech synthesis.
+ */
+export function cleanMarkdownForTTS(markdownText) {
+  if (!markdownText) return '';
+  return markdownText
+    .replace(/```[\s\S]*?```/g, '') // Remove code blocks
+    .replace(/`([^`]+)`/g, '$1') // Inline code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Links
+    .replace(/[*_~]{1,3}(.*?)[*_~]{1,3}/g, '$1') // Bold / italic / strikethrough
+    .replace(/^#{1,6}\s+/gm, '') // Headers
+    .replace(/^>\s+/gm, '') // Blockquotes
+    .replace(/^[-*+]\s+/gm, '') // Unordered lists
+    .replace(/^\d+\.\s+/gm, '') // Ordered lists
+    .replace(/\|/g, ' ') // Table bars
+    .replace(/\n{2,}/g, '. ') // Paragraph breaks to sentence pauses
+    .replace(/\s+/g, ' ') // Multiple spaces
+    .trim();
+}
+
+/**
+ * Direct PCM Float32 audio recorder that encodes directly to standard 16kHz mono WAV
+ * without container header corruption or decodeAudioData failures.
+ */
+class DirectAudioRecorder {
   constructor() {
     this.mediaStream = null;
-    this.mediaRecorder = null;
-    this.chunks = [];
+    this.audioContext = null;
+    this.sourceNode = null;
+    this.processorNode = null;
+    this.recordedSamples = [];
   }
 
   async start() {
-    this.chunks = [];
+    this.recordedSamples = [];
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error('Audio recording is not supported in this browser.');
+      throw new Error('Microphone access is not supported in this browser.');
     }
 
     this.mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -23,96 +74,79 @@ class VoiceRecorder {
         channelCount: 1,
         echoCancellation: true,
         noiseSuppression: true,
+        autoGainControl: true,
       },
     });
 
-    let mimeType = '';
-    if (typeof MediaRecorder !== 'undefined') {
-      if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-        mimeType = 'audio/webm;codecs=opus';
-      } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-        mimeType = 'audio/webm';
-      } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
-        mimeType = 'audio/ogg;codecs=opus';
-      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-        mimeType = 'audio/mp4';
-      }
-    }
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    this.audioContext = new AudioContextClass();
+    this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
 
-    this.mediaRecorder = new MediaRecorder(
-      this.mediaStream,
-      mimeType ? { mimeType } : undefined
-    );
-
-    this.mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) {
-        this.chunks.push(e.data);
-      }
+    // Use ScriptProcessor for broad browser compatibility without deprecation crashes
+    // bufferSize 4096 gives ~92ms chunks at 44.1kHz
+    this.processorNode = this.audioContext.createScriptProcessor(4096, 1, 1);
+    this.processorNode.onaudioprocess = (e) => {
+      const channel = e.inputBuffer.getChannelData(0);
+      this.recordedSamples.push(new Float32Array(channel));
     };
 
-    this.mediaRecorder.start(200);
+    this.sourceNode.connect(this.processorNode);
+    this.processorNode.connect(this.audioContext.destination);
   }
 
   async stop() {
-    return new Promise((resolve, reject) => {
-      if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
-        reject(new Error('No active recorder to stop.'));
-        return;
-      }
-
-      this.mediaRecorder.onstop = async () => {
-        try {
-          if (this.mediaStream) {
-            this.mediaStream.getTracks().forEach((track) => track.stop());
-            this.mediaStream = null;
-          }
-
-          const rawBlob = new Blob(this.chunks, {
-            type: this.mediaRecorder.mimeType || 'audio/webm',
-          });
-          const wavBlob = await this.convertTo16kHzWAV(rawBlob);
-          resolve(wavBlob);
-        } catch (err) {
-          reject(err);
-        }
-      };
-
-      this.mediaRecorder.stop();
-    });
-  }
-
-  async convertTo16kHzWAV(blob) {
-    const arrayBuffer = await blob.arrayBuffer();
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    const audioCtx = new AudioContextClass();
-
-    try {
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-      // Resample to 16,000 Hz Mono using OfflineAudioContext
-      const targetSampleRate = 16000;
-      const numChannels = 1;
-      const offlineCtx = new (window.OfflineAudioContext ||
-        window.webkitOfflineAudioContext)(
-        numChannels,
-        Math.max(1, Math.ceil(audioBuffer.duration * targetSampleRate)),
-        targetSampleRate
-      );
-
-      const source = offlineCtx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(offlineCtx.destination);
-      source.start(0);
-
-      const renderedBuffer = await offlineCtx.startRendering();
-      const pcmData = renderedBuffer.getChannelData(0);
-
-      return this.encodeWAV(pcmData, targetSampleRate);
-    } finally {
-      if (audioCtx.state !== 'closed') {
-        await audioCtx.close();
+    if (this.sourceNode && this.processorNode) {
+      try {
+        this.sourceNode.disconnect();
+        this.processorNode.disconnect();
+      } catch {
+        /* noop */
       }
     }
+
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach((track) => track.stop());
+      this.mediaStream = null;
+    }
+
+    const inputSampleRate = this.audioContext ? this.audioContext.sampleRate : 44100;
+    if (this.audioContext && this.audioContext.state !== 'closed') {
+      try {
+        await this.audioContext.close();
+      } catch {
+        /* noop */
+      }
+      this.audioContext = null;
+    }
+
+    // Merge float buffers
+    let totalLength = 0;
+    for (const chunk of this.recordedSamples) {
+      totalLength += chunk.length;
+    }
+
+    const merged = new Float32Array(totalLength);
+    let offset = 0;
+    for (const chunk of this.recordedSamples) {
+      merged.set(chunk, offset);
+      offset += chunk.length;
+    }
+
+    // Downsample to 16,000 Hz for Azure Speech Cognitive Services
+    const downsampled = this.downsampleTo16kHz(merged, inputSampleRate);
+    return this.encodeWAV(downsampled, 16000);
+  }
+
+  downsampleTo16kHz(samples, sourceRate) {
+    if (sourceRate === 16000 || samples.length === 0) return samples;
+    const ratio = sourceRate / 16000;
+    const targetLength = Math.max(1, Math.round(samples.length / ratio));
+    const result = new Float32Array(targetLength);
+    for (let i = 0; i < targetLength; i++) {
+      const srcIdx = Math.min(Math.floor(i * ratio), samples.length - 1);
+      result[i] = samples[srcIdx];
+    }
+    return result;
   }
 
   encodeWAV(samples, sampleRate = 16000) {
@@ -133,8 +167,8 @@ class VoiceRecorder {
     view.setUint16(20, 1, true); // AudioFormat (1 for PCM)
     view.setUint16(22, 1, true); // NumChannels (1 mono)
     view.setUint32(24, sampleRate, true); // SampleRate
-    view.setUint32(28, sampleRate * 2, true); // ByteRate
-    view.setUint16(32, 2, true); // BlockAlign
+    view.setUint32(28, sampleRate * 2, true); // ByteRate (sampleRate * 2)
+    view.setUint16(32, 2, true); // BlockAlign (1 channel * 2 bytes)
     view.setUint16(34, 16, true); // BitsPerSample (16 bit)
     writeString(36, 'data');
     view.setUint32(40, samples.length * 2, true);
@@ -153,36 +187,132 @@ class VoiceRecorder {
 let activeRecorder = null;
 
 export const speechService = {
-  async startRecording() {
-    if (activeRecorder) {
+  /**
+   * Start live speech recognition (STT) + audio capture.
+   * Words are streamed directly into onInterim callback in real-time as the user speaks!
+   */
+  async startVoiceInput({
+    language = 'en',
+    onInterim = null,
+    onFinal = null,
+    onError = null,
+  } = {}) {
+    this.stopAudio();
+    this.stopVoiceInput();
+
+    const locale = LOCALE_MAP[language] || 'en-IN';
+
+    // 1. Start browser real-time speech recognition if supported
+    const SpeechRecognition =
+      window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
       try {
-        await activeRecorder.stop();
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = locale;
+
+        let accumulatedFinal = '';
+
+        recognition.onresult = (event) => {
+          let interimText = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              accumulatedFinal += (accumulatedFinal ? ' ' : '') + transcript.trim();
+            } else {
+              interimText += transcript;
+            }
+          }
+
+          const currentLiveText = (accumulatedFinal + ' ' + interimText).trim();
+          if (onInterim && currentLiveText) {
+            onInterim(currentLiveText);
+          }
+        };
+
+        recognition.onerror = (err) => {
+          console.warn('Browser SpeechRecognition warning:', err.error);
+          if (onError && err.error !== 'no-speech') {
+            onError(err.error);
+          }
+        };
+
+        recognition.start();
+        activeRecognition = recognition;
+      } catch (recErr) {
+        console.warn('Failed to start browser SpeechRecognition:', recErr);
+      }
+    }
+
+    // 2. Start direct PCM audio recording for Azure Speech backend verification
+    try {
+      activeRecorder = new DirectAudioRecorder();
+      await activeRecorder.start();
+    } catch (audioErr) {
+      console.warn('Audio recorder startup notice:', audioErr);
+      if (!SpeechRecognition) {
+        throw audioErr;
+      }
+    }
+  },
+
+  /**
+   * Stop voice recording session and obtain WAV audio blob.
+   */
+  async stopVoiceInput() {
+    if (activeRecognition) {
+      try {
+        activeRecognition.stop();
       } catch {
         /* noop */
       }
+      activeRecognition = null;
     }
-    activeRecorder = new VoiceRecorder();
-    await activeRecorder.start();
+
+    if (activeRecorder) {
+      try {
+        const wavBlob = await activeRecorder.stop();
+        activeRecorder = null;
+        return wavBlob;
+      } catch (err) {
+        activeRecorder = null;
+        console.warn('Error stopping active recorder:', err);
+      }
+    }
+    return null;
+  },
+
+  /**
+   * Legacy helper wrappers for start/stop recording.
+   */
+  async startRecording() {
+    await this.startVoiceInput();
   },
 
   async stopRecording() {
-    if (!activeRecorder) {
-      throw new Error('No active voice recording session.');
-    }
-    const wavBlob = await activeRecorder.stop();
-    activeRecorder = null;
-    return wavBlob;
+    return await this.stopVoiceInput();
   },
 
+  /**
+   * Transcribe recorded audio file using Microsoft Azure Speech Cognitive Services.
+   */
   async transcribeAudio(audioBlob, language = 'en') {
+    if (!audioBlob || audioBlob.size === 0) {
+      return { transcript: '', confidence: 0, language };
+    }
+
     const formData = new FormData();
-    formData.append('file', audioBlob, 'recording.wav');
+    formData.append('file', audioBlob, 'speech_input.wav');
 
     const token = localStorage.getItem('farmshield_token');
     const headers = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const url = `${BASE_URL}/speech/transcribe`;
+    const cleanLang = (language || 'en').toLowerCase().split('-')[0];
+    const url = `${BASE_URL}/speech/transcribe?language=${encodeURIComponent(cleanLang)}`;
+
     const res = await fetch(url, {
       method: 'POST',
       headers,
@@ -192,7 +322,7 @@ export const speechService = {
     if (!res.ok) {
       const errJson = await res.json().catch(() => ({}));
       throw new Error(
-        errJson.detail || 'Failed to transcribe voice recording.'
+        errJson.detail || `Speech transcription failed (HTTP ${res.status}).`
       );
     }
 
@@ -200,18 +330,30 @@ export const speechService = {
     return data.data; // { transcript, confidence, language }
   },
 
+  /**
+   * Synthesize text to speech using Microsoft Azure Cognitive Neural Voices.
+   */
   async synthesizeSpeech(text, language = 'en', voiceName = null) {
+    const cleanText = cleanMarkdownForTTS(text);
+    if (!cleanText) {
+      throw new Error('No synthesizable text provided.');
+    }
+
+    const cleanLang = (language || 'en').toLowerCase().split('-')[0];
     const res = await apiRequest('/speech/synthesize', {
       method: 'POST',
       body: JSON.stringify({
-        text,
-        language,
+        text: cleanText,
+        language: cleanLang,
         voice_name: voiceName,
       }),
     });
     return res.data; // { audio_base64, media_type, language, voice_name }
   },
 
+  /**
+   * Stop any currently active audio playback or speech synthesis.
+   */
   stopAudio() {
     if (currentAudioInstance) {
       try {
@@ -222,7 +364,7 @@ export const speechService = {
       }
       currentAudioInstance = null;
     }
-    if (window.speechSynthesis) {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
       try {
         window.speechSynthesis.cancel();
       } catch {
@@ -231,21 +373,26 @@ export const speechService = {
     }
   },
 
+  /**
+   * Speak text using Azure Speech Neural TTS in the user's selected language.
+   * Includes seamless fallback to browser speechSynthesis.
+   */
   async speakText(text, language = 'en', onStart = null, onEnd = null) {
     this.stopAudio();
-    if (!text || !text.trim()) return;
+    const cleanText = cleanMarkdownForTTS(text);
+    if (!cleanText) return null;
 
-    // Try Azure Speech TTS First
+    const cleanLang = (language || 'en').toLowerCase().split('-')[0];
+
+    // Try Azure Speech Neural TTS First
     try {
-      const ttsData = await this.synthesizeSpeech(text, language);
+      const ttsData = await this.synthesizeSpeech(cleanText, cleanLang);
       if (ttsData?.audio_base64) {
-        const audio = new Audio(
-          `data:audio/mpeg;base64,${ttsData.audio_base64}`
-        );
+        const audio = new Audio(`data:audio/mpeg;base64,${ttsData.audio_base64}`);
         currentAudioInstance = audio;
 
         audio.onplay = () => {
-          if (onStart) onStart();
+          if (onStart) onStart({ voice: ttsData.voice_name, language: ttsData.language });
         };
 
         audio.onended = () => {
@@ -255,7 +402,7 @@ export const speechService = {
 
         audio.onerror = () => {
           currentAudioInstance = null;
-          this.fallbackBrowserTTS(text, language, onStart, onEnd);
+          this.fallbackBrowserTTS(cleanText, cleanLang, onStart, onEnd);
         };
 
         await audio.play();
@@ -266,33 +413,35 @@ export const speechService = {
         'Azure Speech TTS unavailable, falling back to browser speech:',
         err.message
       );
-      return this.fallbackBrowserTTS(text, language, onStart, onEnd);
+      return this.fallbackBrowserTTS(cleanText, cleanLang, onStart, onEnd);
     }
   },
 
+  /**
+   * Fallback to native Web Speech Synthesis if offline or network error.
+   */
   fallbackBrowserTTS(text, language = 'en', onStart = null, onEnd = null) {
-    if (!('speechSynthesis' in window)) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
       console.warn('SpeechSynthesis is not supported in this browser.');
       if (onEnd) onEnd();
       return null;
     }
 
+    const cleanLang = (language || 'en').toLowerCase().split('-')[0];
+    const locale = LOCALE_MAP[cleanLang] || 'en-IN';
     const utterance = new SpeechSynthesisUtterance(text);
-    const langMap = {
-      en: 'en-IN',
-      hi: 'hi-IN',
-      te: 'te-IN',
-      ta: 'ta-IN',
-      kn: 'kn-IN',
-      mr: 'mr-IN',
-      bn: 'bn-IN',
-      gu: 'gu-IN',
-    };
-    utterance.lang = langMap[language] || 'en-IN';
+    utterance.lang = locale;
     utterance.rate = 0.95;
 
+    // Try to pick a voice matching the locale
+    const voices = window.speechSynthesis.getVoices();
+    const matchingVoice = voices.find((v) => v.lang === locale || v.lang.startsWith(cleanLang));
+    if (matchingVoice) {
+      utterance.voice = matchingVoice;
+    }
+
     utterance.onstart = () => {
-      if (onStart) onStart();
+      if (onStart) onStart({ voice: utterance.voice?.name || 'Browser Voice', language: locale });
     };
     utterance.onend = () => {
       if (onEnd) onEnd();

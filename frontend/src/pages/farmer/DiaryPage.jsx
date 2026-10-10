@@ -41,6 +41,7 @@ export default function DiaryPage({ activeBatch }) {
   const [activePlayingId, setActivePlayingId] = useState(null);
 
   const timerRef = useRef(null);
+  const baseTextRef = useRef('');
 
   const loadDiary = async () => {
     if (!activeBatch) return;
@@ -62,16 +63,30 @@ export default function DiaryPage({ activeBatch }) {
   useEffect(() => {
     return () => {
       speechService.stopAudio();
+      speechService.stopVoiceInput();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
 
-  // Real Azure Speech-to-Text recording
+  // Real-time Azure Speech-to-Text observation recording
   const handleStartVoice = async () => {
     try {
       speechService.stopAudio();
       setActivePlayingId(null);
-      await speechService.startRecording();
+      baseTextRef.current = text.trim();
+
+      await speechService.startVoiceInput({
+        language: user?.preferred_language || 'en',
+        onInterim: (liveTranscript) => {
+          // Immediately display spoken text in the observation box in real-time!
+          const prefix = baseTextRef.current;
+          setText(prefix ? `${prefix} ${liveTranscript}` : liveTranscript);
+        },
+        onError: (err) => {
+          console.warn('Real-time voice input warning:', err);
+        },
+      });
+
       setIsRecording(true);
       setRecordingSeconds(0);
       timerRef.current = setInterval(() => {
@@ -89,33 +104,58 @@ export default function DiaryPage({ activeBatch }) {
     setIsTranscribing(true);
 
     try {
-      const audioBlob = await speechService.stopRecording();
-      const res = await speechService.transcribeAudio(
-        audioBlob,
-        user?.preferred_language || 'en'
-      );
-      if (res?.transcript) {
-        setVoiceTranscript(res.transcript);
-        setText((prev) => {
-          const newText = prev ? `${prev} ${res.transcript}` : res.transcript;
-          return newText;
-        });
+      const audioBlob = await speechService.stopVoiceInput();
+      if (audioBlob) {
+        const res = await speechService.transcribeAudio(
+          audioBlob,
+          user?.preferred_language || 'en'
+        );
+        if (res?.transcript) {
+          setVoiceTranscript(res.transcript);
+          setText((prev) => {
+            const current = (prev || '').trim();
+            if (!current || current === baseTextRef.current) {
+              const prefix = baseTextRef.current;
+              return prefix ? `${prefix} ${res.transcript}` : res.transcript;
+            }
+            return current;
+          });
 
-        // Smart category heuristic
-        const lower = res.transcript.toLowerCase();
-        if (lower.includes('beetle') || lower.includes('insect') || lower.includes('pest') || lower.includes('weevil')) {
-          setCategory('insect_activity');
-          setSeverity('minor_concern');
-        } else if (lower.includes('smell') || lower.includes('odor') || lower.includes('musty') || lower.includes('sour')) {
-          setCategory('smell');
-        } else if (lower.includes('water') || lower.includes('damp') || lower.includes('moisture') || lower.includes('leak')) {
-          setCategory('moisture_leakage');
-        } else if (lower.includes('hot') || lower.includes('heat') || lower.includes('warm')) {
-          setCategory('temperature_hotspot');
+          // Smart category heuristic
+          const lower = res.transcript.toLowerCase();
+          if (
+            lower.includes('beetle') ||
+            lower.includes('insect') ||
+            lower.includes('pest') ||
+            lower.includes('weevil')
+          ) {
+            setCategory('insect_activity');
+            setSeverity('minor_concern');
+          } else if (
+            lower.includes('smell') ||
+            lower.includes('odor') ||
+            lower.includes('musty') ||
+            lower.includes('sour')
+          ) {
+            setCategory('smell');
+          } else if (
+            lower.includes('water') ||
+            lower.includes('damp') ||
+            lower.includes('moisture') ||
+            lower.includes('leak')
+          ) {
+            setCategory('moisture_leakage');
+          } else if (
+            lower.includes('hot') ||
+            lower.includes('heat') ||
+            lower.includes('warm')
+          ) {
+            setCategory('temperature_hotspot');
+          }
         }
       }
     } catch (err) {
-      alert(`Voice transcription error: ${err.message}`);
+      console.warn('Voice transcription error:', err.message);
     } finally {
       setIsTranscribing(false);
       setRecordingSeconds(0);

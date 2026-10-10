@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { chatbotService } from '../../services/monitoringService';
-import { speechService } from '../../services/speechService';
+import { speechService, SUPPORTED_LANGUAGES } from '../../services/speechService';
 import { useAuth } from '../../context/AuthContext';
 import {
   MessageSquare,
@@ -12,11 +12,12 @@ import {
   ShieldCheck,
   PlusCircle,
   Mic,
-  MicOff,
   Volume2,
   VolumeX,
   Loader2,
   Square,
+  Globe,
+  Radio,
 } from 'lucide-react';
 
 export default function ChatbotPage({ activeBatch }) {
@@ -28,7 +29,11 @@ export default function ChatbotPage({ activeBatch }) {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
 
-  // Speech-to-Text & Text-to-Speech States
+  // Multi-Language & Speech States
+  const [selectedLanguage, setSelectedLanguage] = useState(
+    user?.preferred_language || 'en'
+  );
+  const [autoVoiceOver, setAutoVoiceOver] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -36,6 +41,11 @@ export default function ChatbotPage({ activeBatch }) {
 
   const messagesEndRef = useRef(null);
   const timerRef = useRef(null);
+  const baseInputRef = useRef('');
+
+  const currentLangObj =
+    SUPPORTED_LANGUAGES.find((l) => l.code === selectedLanguage) ||
+    SUPPORTED_LANGUAGES[0];
 
   const suggestedQuestions = [
     'How do I protect my stored grain from weevils naturally?',
@@ -67,6 +77,7 @@ export default function ChatbotPage({ activeBatch }) {
   useEffect(() => {
     return () => {
       speechService.stopAudio();
+      speechService.stopVoiceInput();
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
@@ -88,9 +99,11 @@ export default function ChatbotPage({ activeBatch }) {
     setActivePlayingId(null);
     try {
       const newConvo = await chatbotService.createConversation({
-        title: `Advisory for ${activeBatch ? activeBatch.custom_batch_name : 'Crop Storage'}`,
+        title: `Advisory for ${
+          activeBatch ? activeBatch.custom_batch_name : 'Crop Storage'
+        }`,
         batch_id: activeBatch?.batch_id,
-        language: user?.preferred_language || 'en',
+        language: selectedLanguage,
       });
       setConversations((prev) => [newConvo, ...prev]);
       setCurrentConvoId(newConvo.conversation_id);
@@ -120,9 +133,14 @@ export default function ChatbotPage({ activeBatch }) {
       const response = await chatbotService.sendMessage(currentConvoId, {
         message: text,
         batch_id: activeBatch?.batch_id,
-        language: user?.preferred_language || 'en',
+        language: selectedLanguage,
       });
       setMessages((prev) => [...prev, response]);
+
+      // Automatic Voice-Over if toggle is active
+      if (autoVoiceOver && response?.content) {
+        handlePlayTTS(response.message_id, response.content, selectedLanguage);
+      }
     } catch (err) {
       alert(err.message || 'Error generating AI response');
     } finally {
@@ -130,12 +148,27 @@ export default function ChatbotPage({ activeBatch }) {
     }
   };
 
-  // Voice recording (STT) using Azure Speech
+  // Real-time Speech-to-Text (STT) using Browser Stream + Azure Speech Verification
   const handleStartVoice = async () => {
     try {
       speechService.stopAudio();
       setActivePlayingId(null);
-      await speechService.startRecording();
+      baseInputRef.current = inputMessage.trim();
+
+      await speechService.startVoiceInput({
+        language: selectedLanguage,
+        onInterim: (liveTranscript) => {
+          // Immediately display spoken text in the prompt bar in real-time!
+          const prefix = baseInputRef.current;
+          setInputMessage(
+            prefix ? `${prefix} ${liveTranscript}` : liveTranscript
+          );
+        },
+        onError: (err) => {
+          console.warn('Real-time voice input warning:', err);
+        },
+      });
+
       setIsRecording(true);
       setRecordingSeconds(0);
       timerRef.current = setInterval(() => {
@@ -153,26 +186,34 @@ export default function ChatbotPage({ activeBatch }) {
     setIsTranscribing(true);
 
     try {
-      const audioBlob = await speechService.stopRecording();
-      const res = await speechService.transcribeAudio(
-        audioBlob,
-        user?.preferred_language || 'en'
-      );
-      if (res?.transcript) {
-        setInputMessage((prev) =>
-          prev ? `${prev} ${res.transcript}` : res.transcript
+      const audioBlob = await speechService.stopVoiceInput();
+      if (audioBlob) {
+        const res = await speechService.transcribeAudio(
+          audioBlob,
+          selectedLanguage
         );
+        if (res?.transcript && res.transcript.trim()) {
+          setInputMessage((prev) => {
+            const current = (prev || '').trim();
+            // If prompt bar was empty or equals original base prefix, update with Azure result
+            if (!current || current === baseInputRef.current) {
+              const prefix = baseInputRef.current;
+              return prefix ? `${prefix} ${res.transcript}` : res.transcript;
+            }
+            return current;
+          });
+        }
       }
     } catch (err) {
-      alert(`Voice transcription error: ${err.message}`);
+      console.warn('Azure Speech STT refinement note:', err.message);
     } finally {
       setIsTranscribing(false);
       setRecordingSeconds(0);
     }
   };
 
-  // Text-to-Speech (TTS) using Azure Speech
-  const handlePlayTTS = async (msgId, text) => {
+  // Text-to-Speech (TTS) using Azure Speech Neural Voices
+  const handlePlayTTS = async (msgId, text, lang = selectedLanguage) => {
     if (activePlayingId === msgId) {
       speechService.stopAudio();
       setActivePlayingId(null);
@@ -183,7 +224,7 @@ export default function ChatbotPage({ activeBatch }) {
     try {
       await speechService.speakText(
         text,
-        user?.preferred_language || 'en',
+        lang,
         () => setActivePlayingId(msgId),
         () => setActivePlayingId(null)
       );
@@ -206,7 +247,7 @@ export default function ChatbotPage({ activeBatch }) {
         height: 'calc(100vh - 120px)',
       }}
     >
-      {/* Header */}
+      {/* Top Header Bar */}
       <div
         className="glass-panel"
         style={{
@@ -220,25 +261,99 @@ export default function ChatbotPage({ activeBatch }) {
       >
         <div>
           <span className="badge badge-verified">
-            <Sparkles size={12} /> Workflow 8: Groq LLM + Azure Speech (STT / TTS)
+            <Sparkles size={12} /> Groq LLM + Azure Speech Cognitive Services
           </span>
           <h1 style={{ fontSize: '1.5rem', marginTop: '2px' }}>
             AI Agricultural Storage Advisory
           </h1>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span
+
+        {/* Multi-Language & Voice Control Center */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            flexWrap: 'wrap',
+          }}
+        >
+          {/* Language Selector Dropdown */}
+          <div
             style={{
-              fontSize: '0.8rem',
-              color: '#34d399',
-              background: 'rgba(16, 185, 129, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(15, 23, 42, 0.7)',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              borderRadius: '8px',
               padding: '4px 10px',
-              borderRadius: '6px',
-              border: '1px solid rgba(16, 185, 129, 0.3)',
             }}
           >
-            Voice Active ({user?.preferred_language?.toUpperCase() || 'EN'})
-          </span>
+            <Globe size={15} color="#34d399" />
+            <select
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              aria-label="Select Advisory & Voice Language"
+              style={{
+                background: 'transparent',
+                color: '#f8fafc',
+                border: 'none',
+                outline: 'none',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                fontWeight: '600',
+              }}
+            >
+              {SUPPORTED_LANGUAGES.map((lang) => (
+                <option
+                  key={lang.code}
+                  value={lang.code}
+                  style={{ background: '#1e293b', color: '#fff' }}
+                >
+                  {lang.native} ({lang.label})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Auto Voice-Over Toggle */}
+          <button
+            type="button"
+            onClick={() => setAutoVoiceOver((prev) => !prev)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              fontSize: '0.82rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              border: autoVoiceOver
+                ? '1px solid #10b981'
+                : '1px solid rgba(255, 255, 255, 0.15)',
+              background: autoVoiceOver
+                ? 'rgba(16, 185, 129, 0.2)'
+                : 'rgba(255, 255, 255, 0.05)',
+              color: autoVoiceOver ? '#34d399' : '#cbd5e1',
+            }}
+            title="Automatically voice over incoming AI responses in selected language"
+          >
+            {autoVoiceOver ? (
+              <>
+                <Volume2 size={15} color="#34d399" />
+                <span>Auto Voice-Over: ON</span>
+              </>
+            ) : (
+              <>
+                <VolumeX size={15} color="#94a3b8" />
+                <span>Auto Voice-Over: OFF</span>
+              </>
+            )}
+          </button>
+
+          {/* New Chat Button */}
           <button
             className="btn-secondary"
             onClick={handleNewConversation}
@@ -275,13 +390,13 @@ export default function ChatbotPage({ activeBatch }) {
               style={{
                 textAlign: 'center',
                 margin: 'auto',
-                maxWidth: '550px',
+                maxWidth: '560px',
               }}
             >
               <div
                 style={{
-                  width: '60px',
-                  height: '60px',
+                  width: '64px',
+                  height: '64px',
                   borderRadius: '50%',
                   background: 'rgba(16, 185, 129, 0.15)',
                   display: 'flex',
@@ -290,21 +405,22 @@ export default function ChatbotPage({ activeBatch }) {
                   margin: '0 auto 16px',
                 }}
               >
-                <Bot size={32} color="#10b981" />
+                <Bot size={34} color="#10b981" />
               </div>
               <h3 style={{ fontSize: '1.3rem', marginBottom: '8px' }}>
-                How can I assist your crop storage today?
+                Storage Advisory in {currentLangObj.native} ({currentLangObj.label})
               </h3>
               <p
                 style={{
                   color: '#94a3b8',
                   fontSize: '0.9rem',
-                  marginBottom: '24px',
+                  marginBottom: '20px',
                   lineHeight: 1.5,
                 }}
               >
-                Ask questions by typing or speaking in voice. FarmShield uses
-                Microsoft Azure Speech and Groq LLM to analyze your crops and speak back to you!
+                Speak or type in {currentLangObj.label}. Responses are generated
+                using Groq LLM with traditional Indian storage intelligence and
+                voiced over using Microsoft Azure Neural TTS.
               </p>
               <div
                 style={{
@@ -384,9 +500,17 @@ export default function ChatbotPage({ activeBatch }) {
                 >
                   {m.content}
 
-                  {/* Azure Text-To-Speech Listen Button on Bot Answers */}
+                  {/* Azure Voice-Over Button on Advisory Responses */}
                   {isBot && (
-                    <div style={{ marginTop: '10px' }}>
+                    <div
+                      style={{
+                        marginTop: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        flexWrap: 'wrap',
+                      }}
+                    >
                       <button
                         type="button"
                         onClick={() => handlePlayTTS(msgId, m.content)}
@@ -397,11 +521,12 @@ export default function ChatbotPage({ activeBatch }) {
                           display: 'inline-flex',
                           alignItems: 'center',
                           gap: '6px',
+                          borderRadius: '6px',
                           border: isPlayingThis
                             ? '1px solid #10b981'
-                            : '1px solid rgba(255, 255, 255, 0.12)',
+                            : '1px solid rgba(255, 255, 255, 0.15)',
                           background: isPlayingThis
-                            ? 'rgba(16, 185, 129, 0.2)'
+                            ? 'rgba(16, 185, 129, 0.25)'
                             : 'rgba(255, 255, 255, 0.04)',
                           color: isPlayingThis ? '#34d399' : '#cbd5e1',
                           cursor: 'pointer',
@@ -410,15 +535,32 @@ export default function ChatbotPage({ activeBatch }) {
                         {isPlayingThis ? (
                           <>
                             <VolumeX size={15} color="#34d399" />
-                            Stop Reading Aloud
+                            <span>Stop Voice-Over</span>
                           </>
                         ) : (
                           <>
                             <Volume2 size={15} color="#10b981" />
-                            Read Aloud (Azure Speech)
+                            <span>
+                              Voice Over ({currentLangObj.native} - Azure Neural TTS)
+                            </span>
                           </>
                         )}
                       </button>
+
+                      {isPlayingThis && (
+                        <span
+                          style={{
+                            fontSize: '0.75rem',
+                            color: '#34d399',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          <Radio size={12} className="spin-animation" />
+                          Speaking with Azure Neural Voice...
+                        </span>
+                      )}
                     </div>
                   )}
 
@@ -499,7 +641,7 @@ export default function ChatbotPage({ activeBatch }) {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Bar with Azure STT Microphone */}
+        {/* Input Bar with Real-Time STT Microphone */}
         <div
           style={{
             padding: '16px 20px',
@@ -532,8 +674,12 @@ export default function ChatbotPage({ activeBatch }) {
                 }}
                 className="spin-animation"
               />
-              <strong>Listening with Azure Speech... ({recordingSeconds}s)</strong>
-              <span>Speak your farming question clearly.</span>
+              <strong>
+                Listening in {currentLangObj.native} ({currentLangObj.label})... ({recordingSeconds}s)
+              </strong>
+              <span style={{ color: '#cbd5e1' }}>
+                Words appear in prompt bar in real-time as you speak.
+              </span>
               <button
                 type="button"
                 onClick={handleStopVoice}
@@ -544,6 +690,7 @@ export default function ChatbotPage({ activeBatch }) {
                   fontSize: '0.8rem',
                   border: '1px solid #ef4444',
                   color: '#fca5a5',
+                  cursor: 'pointer',
                 }}
               >
                 <Square size={12} style={{ fill: '#ef4444' }} /> Done Speaking
@@ -563,7 +710,7 @@ export default function ChatbotPage({ activeBatch }) {
               }}
             >
               <Loader2 size={16} className="spin-animation" />
-              Transcribing audio with Azure Cognitive Speech Services...
+              Finalizing speech recognition with Azure Cognitive Services ({currentLangObj.locale})...
             </div>
           )}
 
@@ -577,21 +724,27 @@ export default function ChatbotPage({ activeBatch }) {
             <input
               type="text"
               className="input-field"
-              placeholder="Type or click the microphone to speak your question..."
+              placeholder={`Ask in ${currentLangObj.label} (${currentLangObj.native}) or click mic to speak...`}
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              disabled={sending || isRecording}
-              style={{ flex: 1 }}
+              disabled={sending}
+              style={{
+                flex: 1,
+                border: isRecording ? '1px solid #ef4444' : undefined,
+                background: isRecording
+                  ? 'rgba(239, 68, 68, 0.05)'
+                  : undefined,
+              }}
             />
 
-            {/* Azure STT Voice Input Button */}
+            {/* STT Microphone Input Button */}
             {!isRecording ? (
               <button
                 type="button"
                 onClick={handleStartVoice}
                 disabled={sending || isTranscribing}
                 className="btn-secondary"
-                title="Speak question (Azure Speech STT)"
+                title={`Speak question in ${currentLangObj.label} (STT)`}
                 style={{
                   padding: '10px 14px',
                   display: 'inline-flex',

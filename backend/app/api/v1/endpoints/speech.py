@@ -9,6 +9,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     UploadFile,
     status,
 )
@@ -74,6 +75,7 @@ class SpeechSynthesisResponse(BaseModel):
 )
 async def transcribe_audio_file(
     file: Optional[UploadFile] = File(None),
+    language: Optional[str] = Query(None, description="Language code for transcription (e.g. en, hi, te)"),
     current_user=Depends(get_current_user),
 ):
     if file is None:
@@ -120,9 +122,11 @@ async def transcribe_audio_file(
         else getattr(current_user, "preferred_language", "en")
     )
 
+    selected_lang = (language or preferred_language or "en").strip().lower()
+    lang_key = selected_lang.split("-")[0]
     lang_code = SUPPORTED_SPEECH_LANGUAGES.get(
-        preferred_language,
-        "en-IN",
+        lang_key,
+        SUPPORTED_SPEECH_LANGUAGES.get(selected_lang, "en-IN"),
     )
 
     try:

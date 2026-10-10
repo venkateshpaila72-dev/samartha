@@ -1,6 +1,7 @@
 """Chatbot Service for FarmShield."""
 
 import datetime
+import logging
 import uuid
 from typing import Optional
 
@@ -15,6 +16,8 @@ from app.schemas.chatbot import (
     SourceReference,
 )
 from app.services.context_builder import AIContextBuilder
+
+logger = logging.getLogger(__name__)
 
 _IN_MEMORY_CONVOS: dict[str, dict] = {}
 _IN_MEMORY_MSGS: list[dict] = []
@@ -157,12 +160,49 @@ class ChatbotService:
         if col is not None:
             col.insert_one(user_msg_doc.copy())
 
-        # 3. Call Groq client
+        # 3. Call Groq client with user's selected language
+        target_lang = (payload.language or convo.language or "en").lower().split("-")[0]
+        language_names = {
+            "en": "English",
+            "hi": "Hindi (हिंदी)",
+            "te": "Telugu (తెలుగు)",
+            "ta": "Tamil (தமிழ்)",
+            "kn": "Kannada (ಕನ್ನಡ)",
+            "mr": "Marathi (मराठी)",
+            "bn": "Bengali (বাংলা)",
+            "gu": "Gujarati (ગુજરાતી)",
+            "pa": "Punjabi (ਪੰਜਾਬੀ)",
+        }
+        lang_name = language_names.get(target_lang, "English")
+
+        system_prompt = SYSTEM_PROMPT
+        if target_lang != "en":
+            system_prompt += (
+                f"\n\nCRITICAL LANGUAGE REQUIREMENT:\n"
+                f"The farmer has explicitly chosen to communicate in {lang_name}. "
+                f"You MUST formulate your complete storage advisory response in {lang_name}. "
+                f"Do not respond in English unless specifically requested."
+            )
+
         bot_response, is_live = await GroqClient.generate_response(
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             user_message=payload.message,
             context_data=context_data,
         )
+
+        if target_lang != "en":
+            ascii_letters = sum(1 for c in bot_response if c.isascii() and c.isalpha())
+            total_letters = sum(1 for c in bot_response if c.isalpha())
+            if total_letters > 0 and (ascii_letters / total_letters) > 0.55:
+                try:
+                    from app.integrations.azure_translator_client import AzureTranslatorClient
+                    translated = await AzureTranslatorClient.translate_many(
+                        [bot_response], target_lang=target_lang, source_lang="en"
+                    )
+                    if translated and translated[0]:
+                        bot_response = translated[0]
+                except Exception as t_err:
+                    logger.warning(f"Translation to {target_lang} failed: {t_err}")
 
         # 4. Assembled Sources
         sources: list[SourceReference] = []

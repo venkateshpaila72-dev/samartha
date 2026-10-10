@@ -55,3 +55,13 @@ class TestAzureSpeechAPI(unittest.TestCase):
         data = body["data"]
         self.assertIn("transcript", data)
         self.assertIn("confidence", data)
+
+    def test_06_transcribe_audio_file_with_language_query(self):
+        dummy_audio = io.BytesIO(b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x80>\x00\x00\x00}\x00\x00\x02\x00\x10\x00data\x00\x00\x00\x00")
+        files = {"file": ("recording.wav", dummy_audio, "audio/wav")}
+        res = test_client.post("/api/v1/speech/transcribe?language=te", files=files, headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertTrue(body["success"])
+        self.assertEqual(body["data"]["language"], "te-IN")
+
