@@ -20,7 +20,6 @@ export default function MonitoringPage({ activeBatch }) {
   // Manual reading modal / form state
   const [tempInput, setTempInput] = useState('26.5');
   const [rhInput, setRhInput] = useState('62.0');
-  const [moistureInput, setMoistureInput] = useState('11.5');
   const [provenanceInput, setProvenanceInput] = useState('manual');
   const [submitting, setSubmitting] = useState(false);
 
@@ -54,7 +53,6 @@ export default function MonitoringPage({ activeBatch }) {
         batch_id: activeBatch.batch_id,
         temperature_c: Number(tempInput),
         relative_humidity_percent: Number(rhInput),
-        crop_moisture_percent: moistureInput ? Number(moistureInput) : null,
         sensor_id: provenanceInput === 'hardware_sensor' ? 'iot_dht22_node1' : 'manual_sensor_log',
         provenance: provenanceInput,
       });
@@ -74,7 +72,6 @@ export default function MonitoringPage({ activeBatch }) {
       const midRH = ((crop.recommended_relative_humidity_min_percent || 55) + (crop.recommended_relative_humidity_max_percent || 65)) / 2;
       setTempInput(midT.toFixed(1));
       setRhInput(midRH.toFixed(1));
-      setMoistureInput(((crop.recommended_crop_moisture_percent || 12) - 0.5).toFixed(1));
       setProvenanceInput('simulated');
     } else if (scenario === 'hot') {
       setTempInput(((crop.recommended_temperature_max_c || 25) + 5.5).toFixed(1));
@@ -115,7 +112,6 @@ export default function MonitoringPage({ activeBatch }) {
           {[
             ['Temperature', summary?.current_temperature_c, '°C'],
             ['Humidity', summary?.current_humidity_percent, '% RH'],
-            ['Crop moisture', summary?.current_moisture_percent, '%'],
             ['CO₂', summary?.current_co2_ppm, 'ppm'],
             ['Air velocity', summary?.current_air_velocity_m_s, 'm/s'],
             ['Pressure', summary?.current_pressure_kpa, 'kPa'],
@@ -128,6 +124,30 @@ export default function MonitoringPage({ activeBatch }) {
           ))}
         </div>
         {summary?.reading_provenance && <p style={{ color: '#94a3b8', fontSize: '.78rem', marginBottom: 0 }}>Source: {summary.reading_provenance} · Last reading: {summary.last_reading_time || 'unknown'}</p>}
+      </div>
+
+      {/* Verified crop-profile threshold limits */}
+      <div className="glass-panel" style={{ padding: '20px' }}>
+        <h3 style={{ marginTop: 0 }}>Configured Threshold Limits</h3>
+        <p style={{ color: '#94a3b8', fontSize: '.85rem', marginTop: 0 }}>
+          Limits come from the selected crop's saved profile. A reading outside these ranges creates a storage alert; automatic WhatsApp delivery depends on Twilio configuration and opt-in.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+          <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(148,163,184,.08)', border: '1px solid rgba(148,163,184,.18)' }}>
+            <strong>Temperature</strong>
+            <div style={{ marginTop: '8px', color: '#34d399' }}>
+              {summary?.target_temperature_min_c ?? crop.recommended_temperature_min_c ?? 15}°C – {summary?.target_temperature_max_c ?? crop.recommended_temperature_max_c ?? 25}°C
+            </div>
+            <small style={{ color: '#94a3b8' }}>Below minimum or above maximum triggers an alert.</small>
+          </div>
+          <div style={{ padding: '14px', borderRadius: '12px', background: 'rgba(148,163,184,.08)', border: '1px solid rgba(148,163,184,.18)' }}>
+            <strong>Relative humidity</strong>
+            <div style={{ marginTop: '8px', color: '#34d399' }}>
+              {summary?.target_humidity_min_percent ?? crop.recommended_relative_humidity_min_percent ?? 50}% – {summary?.target_humidity_max_percent ?? crop.recommended_relative_humidity_max_percent ?? 70}%
+            </div>
+            <small style={{ color: '#94a3b8' }}>Below minimum or above maximum triggers an alert.</small>
+          </div>
+        </div>
       </div>
 
       {/* Ingestion & Simulation Tool */}
@@ -174,16 +194,6 @@ export default function MonitoringPage({ activeBatch }) {
             />
           </div>
           <div>
-            <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Crop Moisture (%)</label>
-            <input
-              type="number"
-              step="0.1"
-              className="input-field"
-              value={moistureInput}
-              onChange={(e) => setMoistureInput(e.target.value)}
-            />
-          </div>
-          <div>
             <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Source Provenance</label>
             <select
               className="input-field"
@@ -219,7 +229,6 @@ export default function MonitoringPage({ activeBatch }) {
                   <th style={{ padding: '12px 14px' }}>Timestamp</th>
                   <th style={{ padding: '12px 14px' }}>Temperature</th>
                   <th style={{ padding: '12px 14px' }}>Rel. Humidity</th>
-                  <th style={{ padding: '12px 14px' }}>Grain Moisture</th>
                   <th style={{ padding: '12px 14px' }}>Provenance</th>
                   <th style={{ padding: '12px 14px' }}>Status</th>
                 </tr>
@@ -238,9 +247,6 @@ export default function MonitoringPage({ activeBatch }) {
                       </td>
                       <td style={{ padding: '12px 14px', fontWeight: '700', color: rhSafe ? '#10b981' : '#fbbf24' }}>
                         {r.relative_humidity_percent}%
-                      </td>
-                      <td style={{ padding: '12px 14px', color: '#cbd5e1' }}>
-                        {r.crop_moisture_percent ? `${r.crop_moisture_percent}%` : '--'}
                       </td>
                       <td style={{ padding: '12px 14px' }}>
                         <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>

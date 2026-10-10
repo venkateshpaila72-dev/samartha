@@ -27,7 +27,7 @@ class WhatsAppClient:
     async def send_alert_notification(
         cls, phone_number: str, crop_name: str, condition_type: str,
         measured_value: float, unit: str, recommended_action: str, batch_id: str,
-        preferred_language: str = "en",
+        preferred_language: str = "en", traditional_guidance: str = "",
     ) -> bool:
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         log_id = f"notif_{uuid.uuid4().hex[:10]}"
@@ -40,7 +40,8 @@ class WhatsAppClient:
             f"Batch: {crop_name} (ID: {batch_id})\n"
             f"Condition: {condition_type.replace('_', ' ').upper()}\n"
             f"Reading: {measured_value} {unit}\n\n"
-            f"Action required: {recommended_action}\n\n"
+            f"Technical action: {recommended_action}\n\n"
+            f"Traditional storage guidance: {traditional_guidance or 'Use the verified crop-specific storage guidance in your FarmShield dashboard.'}\n\n"
             f"Check your FarmShield dashboard for updates."
         )
         if lang != "en":

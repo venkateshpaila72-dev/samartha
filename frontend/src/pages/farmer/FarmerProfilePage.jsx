@@ -12,15 +12,19 @@ import { useAuth } from '../../context/AuthContext';
 export default function FarmerProfilePage() {
   const { user } = useAuth();
 
+  // This QR must point to the configured WhatsApp sender, NOT the farmer's own number.
+  // Set these in frontend/.env: VITE_WHATSAPP_OPT_IN_NUMBER and
+  // VITE_WHATSAPP_JOIN_KEYWORD using the exact number/keyword shown by Twilio.
   const whatsappUrl = useMemo(() => {
-    const savedUrl = user?.whatsapp_url?.trim();
+    const senderDigits = (import.meta.env.VITE_WHATSAPP_OPT_IN_NUMBER || '')
+      .replace(/\D/g, '');
+    const joinKeyword = (import.meta.env.VITE_WHATSAPP_JOIN_KEYWORD || '').trim();
 
-    if (savedUrl) return savedUrl;
+    // Never generate a misleading QR if Twilio opt-in details have not been configured.
+    if (!senderDigits || !joinKeyword) return '';
 
-    const digits = (user?.phone_number || '').replace(/\D/g, '');
-
-    return digits ? `https://wa.me/${digits}` : '';
-  }, [user]);
+    return `https://wa.me/${senderDigits}?text=${encodeURIComponent(joinKeyword)}`;
+  }, []);
 
   const copyUrl = async () => {
     if (!whatsappUrl) return;
@@ -41,7 +45,7 @@ export default function FarmerProfilePage() {
           My Farmer Profile
         </h1>
         <p style={{ color: '#94a3b8', marginTop: '8px' }}>
-          Your account information and WhatsApp contact QR code.
+          Your account information and WhatsApp alert opt-in QR code.
         </p>
       </div>
 
@@ -148,7 +152,7 @@ export default function FarmerProfilePage() {
               margin: '0 0 18px',
             }}
           >
-            Scan this code with a phone camera to open the WhatsApp chat link.
+            Scan to open the configured FarmShield WhatsApp sender with the opt-in message pre-filled. Tap Send in WhatsApp to complete opt-in.
           </p>
 
           {whatsappUrl ? (
@@ -226,8 +230,7 @@ export default function FarmerProfilePage() {
                 color: '#94a3b8',
               }}
             >
-              No WhatsApp URL is saved for this account. Add a WhatsApp number
-              and URL during registration.
+              WhatsApp opt-in QR is not configured. Add VITE_WHATSAPP_OPT_IN_NUMBER and VITE_WHATSAPP_JOIN_KEYWORD to frontend/.env using the exact sender number and join keyword from your Twilio WhatsApp setup, then restart the frontend.
             </div>
           )}
         </div>
