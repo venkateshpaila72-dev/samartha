@@ -2,145 +2,151 @@ import { useEffect } from 'react';
 import { apiRequest } from '../services/apiClient';
 import { useLanguage } from '../context/LanguageContext';
 
-const SKIP_TAGS = new Set(['SCRIPT','STYLE','NOSCRIPT','CODE','PRE','TEXTAREA','INPUT','SELECT','OPTION','SVG','PATH']);
-const originals = new WeakMap();
-const translated = new WeakSet();
-const attrOriginals = new WeakMap();
-const trackedNodes = new Set();
-const trackedElements = new Set();
+// A safety-net for legacy screens that still contain raw English text. New UI
+// should use dictionary keys/TranslatedText; this observer covers missed text,
+// placeholders and accessibility labels without touching inputs, code or numbers.
+const originalText = new WeakMap();
+const originalAttributes = new WeakMap();
+const translatedNodes = new WeakSet();
+const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'CODE', 'PRE', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'SVG', 'PATH']);
 
-function eligible(value) {
-  const text = String(value ?? '').trim();
-  return text.length >= 2 && text.length <= 500 && /[A-Za-z]{2}/.test(text) &&
-    !/^[\d\s.,:%$₹+\-/()]+$/.test(text) &&
-    !/^(https?:\/\/|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$)/.test(text);
+function isTranslatableText(value) {
+  const text = String(value || '').trim();
+  if (text.length < 2 || text.length > 700 || !/[A-Za-z]{2}/.test(text)) return false;
+  if (/^[\d\s.,:%$₹+\-/()]+$/.test(text)) return false;
+  if (/^(https?:\/\/|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$)/.test(text)) return false;
+  return true;
 }
 
-// Safety net for legacy components that still render raw English strings.
-// Prefer local dictionary keys for fixed UI and this batch endpoint for missed
-// text, placeholders, titles, and accessible labels.
 export default function AutoTranslateDocument() {
   const { currentLang } = useLanguage();
 
   useEffect(() => {
-    let disposed = false;
+    let cancelled = false;
     let scheduled = false;
-    const pending = new Map();
+    const pending = new Set();
+    const textOriginals = new Map();
+    const attributeOriginals = new Map();
 
-    const shouldSkip = (element) => !element || SKIP_TAGS.has(element.tagName) ||
-      Boolean(element.closest?.('[data-no-translate],.notranslate,[contenteditable="true"]')) ||
-      element.getAttribute?.('translate') === 'no';
-
-    const queueElement = (element) => {
-      if (!element || shouldSkip(element)) return;
-      for (const attr of ['placeholder','title','aria-label']) {
-        const value = element.getAttribute(attr);
-        if (!eligible(value)) continue;
-        let stored = attrOriginals.get(element);
-        if (!stored) { stored = {}; attrOriginals.set(element, stored); }
-        trackedElements.add(element);
-        if (!(attr in stored)) stored[attr] = value;
-        pending.set(element, { kind: 'attribute', attr, source: stored[attr] });
-      }
+    const ignored = (node) => {
+      const parent = node?.parentElement;
+      return !parent || SKIP_TAGS.has(parent.tagName) ||
+        parent.closest('[data-no-translate],.notranslate,[contenteditable="true"]') ||
+        parent.getAttribute('translate') === 'no';
     };
 
-    const scan = (root) => {
-      if (!root || disposed || currentLang === 'en') return;
-      const elements = [];
-      if (root.nodeType === Node.ELEMENT_NODE) elements.push(root);
-      if (root.querySelectorAll) elements.push(...root.querySelectorAll('*'));
-      for (const element of elements) {
-        if (!shouldSkip(element)) queueElement(element);
-      }
+    const scan = (root = document.body) => {
+      if (!root || cancelled) return;
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       let node;
       while ((node = walker.nextNode())) {
-        if (shouldSkip(node.parentElement) || translated.has(node)) continue;
-        const value = originals.has(node) ? originals.get(node) : node.nodeValue;
-        if (!eligible(value)) continue;
-        if (!originals.has(node)) originals.set(node, value);
-        trackedNodes.add(node);
-        pending.set(node, { kind: 'text', source: originals.get(node) });
+        if (ignored(node) || !isTranslatableText(originalText.get(node) ?? node.nodeValue)) continue;
+        if (!originalText.has(node)) originalText.set(node, node.nodeValue);
+        const source = originalText.get(node);
+        textOriginals.set(node, source);
+        pending.add(node);
       }
-      schedule();
-    };
-
-    const schedule = () => {
-      if (scheduled || !pending.size || disposed) return;
-      scheduled = true;
-      queueMicrotask(async () => {
-        scheduled = false;
-        const entries = [...pending.entries()];
-        pending.clear();
-        for (let i = 0; i < entries.length && !disposed; i += 60) {
-          const batch = entries.slice(i, i + 60).filter(([target]) => target.isConnected);
-          if (!batch.length) continue;
-          try {
-            const response = await apiRequest('/translation/batch', {
-              method: 'POST',
-              body: JSON.stringify({
-                texts: batch.map(([, item]) => item.source),
-                target_language: currentLang,
-                source_language: 'en',
-              }),
-            });
-            const values = response?.data?.translated_texts;
-            if (!Array.isArray(values)) continue;
-            batch.forEach(([target, item], index) => {
-              if (!target.isConnected || typeof values[index] !== 'string' || !values[index].trim()) return;
-              if (item.kind === 'text') {
-                if ((originals.get(target) ?? target.nodeValue) !== item.source) return;
-                target.nodeValue = values[index];
-                translated.add(target);
-              } else if (target.getAttribute(item.attr) === item.source) {
-                target.setAttribute(item.attr, values[index]);
-              }
-            });
-          } catch (error) {
-            console.warn('Page translation failed; keeping original text.', error?.message || error);
-          }
+      const elements = [ ...(root.nodeType === 1 ? [root] : []), ...(root.querySelectorAll?.('*') || []) ];
+      for (const element of elements) {
+        if (SKIP_TAGS.has(element.tagName) || element.closest?.('[data-no-translate],.notranslate')) continue;
+        for (const attr of ['placeholder', 'title', 'aria-label']) {
+          const value = element.getAttribute?.(attr);
+          if (!isTranslatableText(originalAttributes.get(element)?.[attr] ?? value)) continue;
+          if (!originalAttributes.has(element)) originalAttributes.set(element, {});
+          const originals = originalAttributes.get(element);
+          if (!(attr in originals)) originals[attr] = value;
+          attributeOriginals.set(element, { ...(attributeOriginals.get(element) || {}), [attr]: originals[attr] });
         }
-      });
+      }
+      if (!scheduled && (pending.size || attributeOriginals.size)) {
+        scheduled = true;
+        queueMicrotask(runBatch);
+      }
     };
 
-    if (currentLang !== 'en') scan(document.body);
-    const observer = new MutationObserver((mutations) => {
+    const restoreOriginal = () => {
+      for (const [node, source] of textOriginals) if (node.isConnected) node.nodeValue = source;
+      for (const [element, attrs] of attributeOriginals) {
+        if (!element.isConnected) continue;
+        for (const [attr, source] of Object.entries(attrs)) element.setAttribute(attr, source ?? '');
+      }
+      pending.clear();
+      textOriginals.clear();
+      attributeOriginals.clear();
+    };
+
+    async function runBatch() {
+      scheduled = false;
+      if (cancelled) return;
+      const nodes = [...pending].filter((node) => node.isConnected);
+      pending.clear();
+      const attrs = [...attributeOriginals.entries()].filter(([el]) => el.isConnected);
+      attributeOriginals.clear();
       if (currentLang === 'en') return;
+      const entries = [
+        ...nodes.map((node) => ({ kind: 'text', target: node, source: textOriginals.get(node) ?? originalText.get(node) ?? node.nodeValue })),
+        ...attrs.flatMap(([element, values]) => Object.entries(values).map(([attr, source]) => ({ kind: 'attr', target: element, attr, source }))),
+      ].filter((entry) => isTranslatableText(entry.source));
+      // Batches obey the backend's 100-text request limit.
+      for (let i = 0; i < entries.length && !cancelled; i += 80) {
+        const group = entries.slice(i, i + 80);
+        try {
+          const response = await apiRequest('/translation/batch', {
+            method: 'POST',
+            body: JSON.stringify({ texts: group.map((entry) => entry.source), target_language: currentLang, source_language: 'en' }),
+          });
+          const translated = response?.data?.translated_texts;
+          if (!Array.isArray(translated)) continue;
+          group.forEach((entry, index) => {
+            if (!entry.target.isConnected || typeof translated[index] !== 'string') return;
+            const value = translated[index];
+            if (entry.kind === 'text') {
+              // Do not overwrite a node if React or the user changed it while the request was in flight.
+              if ((originalText.get(entry.target) ?? entry.target.nodeValue) === entry.source) {
+                entry.target.nodeValue = value;
+                translatedNodes.add(entry.target);
+              }
+            } else if (entry.target.getAttribute(entry.attr) === entry.source) {
+              entry.target.setAttribute(entry.attr, value);
+            }
+          });
+        } catch (error) {
+          console.warn('Automatic page translation failed; dictionary text remains available.', error?.message || error);
+        }
+      }
+    }
+
+    if (currentLang !== 'en') scan();
+    const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         if (mutation.type === 'characterData') {
           const node = mutation.target;
-          if (translated.has(node)) { translated.delete(node); continue; }
-          if (eligible(node.nodeValue)) {
-            originals.set(node, node.nodeValue);
-            pending.set(node, { kind: 'text', source: node.nodeValue });
+          if (translatedNodes.has(node)) {
+            translatedNodes.delete(node);
+            continue;
+          }
+          originalText.set(node, node.nodeValue);
+          pending.add(node);
+        }
+        for (const added of mutation.addedNodes || []) {
+          if (added.nodeType === Node.ELEMENT_NODE) scan(added);
+          else if (added.nodeType === Node.TEXT_NODE && !ignored(added)) {
+            originalText.set(added, added.nodeValue);
+            pending.add(added);
           }
         }
-        mutation.addedNodes?.forEach((node) => {
-          if (node.nodeType === Node.ELEMENT_NODE) scan(node);
-          else if (node.nodeType === Node.TEXT_NODE && !shouldSkip(node.parentElement) && eligible(node.nodeValue)) {
-            originals.set(node, node.nodeValue);
-            pending.set(node, { kind: 'text', source: node.nodeValue });
-          }
-        });
       }
-      schedule();
+      if (pending.size && !scheduled) {
+        scheduled = true;
+        queueMicrotask(runBatch);
+      }
     });
     observer.observe(document.body, { subtree: true, childList: true, characterData: true });
 
     return () => {
-      disposed = true;
+      cancelled = true;
       observer.disconnect();
-      // Restore text from its source when switching languages so we never
-      // translate a translation as if it were English.
-      for (const node of trackedNodes) {
-        const source = originals.get(node);
-        if (node.isConnected && source !== undefined) node.nodeValue = source;
-        translated.delete(node);
-      }
-      for (const element of trackedElements) {
-        const attrs = attrOriginals.get(element) || {};
-        if (element.isConnected) Object.entries(attrs).forEach(([attr, source]) => element.setAttribute(attr, source));
-      }
+      restoreOriginal();
     };
   }, [currentLang]);
 
