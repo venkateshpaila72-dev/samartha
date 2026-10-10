@@ -153,7 +153,7 @@ export default function App() {
           )}
 
           {currentTab === 'monitoring' && (
-            <MonitoringPage activeBatch={activeBatch} />
+            <MonitoringPage activeBatch={activeBatch} onNavigate={setCurrentTab} />
           )}
 
           {currentTab === 'diary' && (
