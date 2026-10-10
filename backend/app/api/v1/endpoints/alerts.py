@@ -142,6 +142,7 @@ async def dispatch_whatsapp_alert(
         unit=alert.get("unit", ""),
         recommended_action=alert.get("recommended_action", "Check storage conditions immediately."),
         batch_id=batch_id,
+        preferred_language=current_user.get("preferred_language", "en"),
     )
 
     if success:

@@ -84,6 +84,7 @@ def create_all_indexes(db: Database) -> dict[str, list[str]]:
 
         # Market Prices & Weather
         db[MARKET_PRICES_COLLECTION].create_index([("crop", ASCENDING), ("market", ASCENDING), ("date", DESCENDING)])
+        db[MARKET_PRICES_COLLECTION].create_index([("source_record_id", ASCENDING)], unique=True, sparse=True)
         db[WEATHER_RECORDS_COLLECTION].create_index([("location", ASCENDING), ("timestamp", DESCENDING)])
         results[MARKET_PRICES_COLLECTION] = ["crop + market + date"]
         results[WEATHER_RECORDS_COLLECTION] = ["location + timestamp"]

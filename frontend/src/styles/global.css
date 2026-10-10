@@ -250,6 +250,7 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
+<<<<<<< HEAD
 /* Translation progress indicator */
 .translation-progress {
   position: fixed;
@@ -305,4 +306,20 @@ h1, h2, h3, h4, h5, h6 {
   .translation-progress {
     animation: none;
   }
+=======
+/* Translation text gently fades into place after the language switch. */
+.translation-fade {
+  transition: opacity 180ms ease-in-out, filter 180ms ease-in-out;
+}
+.translation-pending {
+  opacity: 0.62;
+  filter: blur(0.2px);
+}
+.translation-ready {
+  opacity: 1;
+  filter: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .translation-fade { transition: none; }
+>>>>>>> e593938731cffe4d25d52e76603c5c3a00419be2
 }

@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     AGMARKNET_BASE_URL: str = "https://api.agmarknet.gov.in/v1"
     MARKET_API_KEY: str = ""
     MARKET_API_BASE_URL: str = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
+    # Secret used only by the scheduled market-ingestion endpoint.
+    MARKET_SYNC_SECRET: str = ""
 
     # WhatsApp Provider (Twilio)
     WHATSAPP_PROVIDER: str = "twilio"
