@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Mail,
@@ -8,9 +8,20 @@ import {
   Languages,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { marketService } from '../../services/marketService';
+import { useLanguage } from '../../context/LanguageContext';
 
-export default function FarmerProfilePage() {
-  const { user } = useAuth();
+const profileInputStyle = { width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '9px', border: '1px solid rgba(148,163,184,.3)', background: 'rgba(15,23,42,.75)', color: '#f8fafc' };
+
+export default function FarmerProfilePage({ onNavigate }) {
+  const { user, updateProfile } = useAuth();
+  const { currentLang } = useLanguage();
+  const [crop, setCrop] = useState(user?.selected_crop || '');
+  const [state, setState] = useState(user?.state || '');
+  const [district, setDistrict] = useState(user?.district || '');
+  const [busy, setBusy] = useState(false);
+  const [marketMessage, setMarketMessage] = useState('');
+  const [syncResult, setSyncResult] = useState(null);
 
   const whatsappUrl = useMemo(() => {
     const savedUrl = user?.whatsapp_url?.trim();
@@ -231,6 +242,56 @@ export default function FarmerProfilePage() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="glass-panel" style={{ marginTop: '24px', padding: '24px' }}>
+        <h2 style={{ marginTop: 0 }}>Market Prices &amp; Sync</h2>
+        <p style={{ color: '#94a3b8', lineHeight: 1.6 }}>Save the crop and mandi location you want FarmShield to use. Sync imports real provider observations; it does not create missing prices.</p>
+        <form onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true); setMarketMessage(''); setSyncResult(null);
+          try {
+            const updated = await updateProfile({ selected_crop: crop.trim(), state: state.trim(), district: district.trim() || null });
+            try {
+              localStorage.setItem('farmshield_selected_crop', updated.selected_crop || crop.trim());
+              localStorage.setItem('farmshield_state', updated.state || state.trim());
+              if (district.trim()) localStorage.setItem('farmshield_district', district.trim());
+            } catch { /* Server profile is authoritative. */ }
+            setMarketMessage('Market preferences saved.');
+          } catch (error) {
+            setMarketMessage(error?.message || 'Could not save market preferences.');
+          } finally { setBusy(false); }
+        }} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px' }}>
+          <label style={{ display: 'grid', gap: '6px' }}>Selected crop
+            <input value={crop} onChange={(event) => setCrop(event.target.value)} required maxLength={100} placeholder="e.g. Wheat" style={profileInputStyle} />
+          </label>
+          <label style={{ display: 'grid', gap: '6px' }}>State
+            <input value={state} onChange={(event) => setState(event.target.value)} required maxLength={100} placeholder="e.g. Telangana" style={profileInputStyle} />
+          </label>
+          <label style={{ display: 'grid', gap: '6px' }}>District (optional)
+            <input value={district} onChange={(event) => setDistrict(event.target.value)} maxLength={100} placeholder="e.g. Mancherial" style={profileInputStyle} />
+          </label>
+          <div style={{ display: 'flex', alignItems: 'end', gap: '10px', flexWrap: 'wrap' }}>
+            <button className="btn-secondary" type="submit" disabled={busy}>Save Market Preferences</button>
+            <button className="btn-primary" type="button" disabled={busy || !crop.trim() || !state.trim()} onClick={async () => {
+              setBusy(true); setMarketMessage(''); setSyncResult(null);
+              try {
+                await updateProfile({ selected_crop: crop.trim(), state: state.trim(), district: district.trim() || null });
+                const result = await marketService.syncMarketPrices({ crop: crop.trim(), state: state.trim(), district: district.trim() || undefined });
+                setSyncResult(result);
+                setMarketMessage('Sync request completed. Review the returned record counts below.');
+              } catch (error) {
+                setMarketMessage(error?.message || 'Market sync failed. Check provider configuration and try again later.');
+              } finally { setBusy(false); }
+            }}>{busy ? 'Working…' : 'Sync Market Prices Now'}</button>
+            <button className="btn-secondary" type="button" onClick={() => onNavigate?.('market')}>View Market Prices</button>
+          </div>
+        </form>
+        {marketMessage && <p role="status" aria-live="polite" style={{ marginTop: '14px', color: syncResult ? '#34d399' : '#cbd5e1' }}>{marketMessage}</p>}
+        {syncResult?.data && <p style={{ color: '#cbd5e1', overflowWrap: 'anywhere' }}>
+          Fetched: {syncResult.data.records_fetched ?? 0} · Inserted/updated: {syncResult.data.records_inserted_or_updated ?? 0} · Rejected: {syncResult.data.records_rejected ?? 0}
+        </p>}
+        <p style={{ color: '#94a3b8', fontSize: '.85rem' }}>Manual sync is limited to one request per account every 15 minutes. Availability depends on provider configuration and data coverage.</p>
       </div>
     </section>
   );
