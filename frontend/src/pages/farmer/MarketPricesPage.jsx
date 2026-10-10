@@ -147,13 +147,13 @@ export default function MarketPricesPage({ activeBatch }) {
           <section className="glass-panel glow-border" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '18px' }}>
             <div>
               <span className="badge badge-verified">
-                <TrendingUp size={14} /> Trend: {(market.price_trend || 'unknown').toUpperCase()}
+                <TrendingUp size={14} /> <TranslatedText text="Trend:" /> <TranslatedText text={(market.price_trend || 'unknown').toUpperCase()} />
               </span>
               <h2 style={{ fontSize: '2rem', marginTop: '10px', color: '#34d399' }}>
                 {market.average_modal_price == null
                   ? '—'
                   : `₹${Number(market.average_modal_price).toLocaleString('en-IN')}`}
-                <span style={{ fontSize: '1rem', color: '#94a3b8' }}> / Quintal</span>
+                <span style={{ fontSize: '1rem', color: '#94a3b8' }}> / <TranslatedText text="Quintal" /></span>
               </h2>
               <p style={{ color: '#94a3b8', marginTop: '6px' }}>
                 {market.crop_name} · {state}{district ? `, ${district}` : ''}
@@ -165,7 +165,7 @@ export default function MarketPricesPage({ activeBatch }) {
                 {market.recommendation}
               </p>
               <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '8px' }}>
-                Source: imported market dataset · Retrieved {market.retrieval_timestamp ? new Date(market.retrieval_timestamp).toLocaleString() : 'recently'}
+                <TranslatedText text="Source: imported market dataset · Retrieved" /> {market.retrieval_timestamp ? new Date(market.retrieval_timestamp).toLocaleString() : <TranslatedText text="recently" />}
               </p>
             </div>
           </section>
@@ -178,12 +178,12 @@ export default function MarketPricesPage({ activeBatch }) {
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.92rem' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8' }}>
-                    <th style={{ padding: '12px' }}>Mandi / Market</th>
-                    <th style={{ padding: '12px' }}>District & State</th>
-                    <th style={{ padding: '12px' }}>Modal Price</th>
-                    <th style={{ padding: '12px' }}>Min – Max</th>
-                    <th style={{ padding: '12px' }}>Reported Date</th>
-                    <th style={{ padding: '12px' }}>Source</th>
+                    <th style={{ padding: '12px' }}><TranslatedText text="Mandi / Market" /></th>
+                    <th style={{ padding: '12px' }}><TranslatedText text="District & State" /></th>
+                    <th style={{ padding: '12px' }}><TranslatedText text="Modal Price" /></th>
+                    <th style={{ padding: '12px' }}><TranslatedText text="Min – Max" /></th>
+                    <th style={{ padding: '12px' }}><TranslatedText text="Reported Date" /></th>
+                    <th style={{ padding: '12px' }}><TranslatedText text="Source" /></th>
                   </tr>
                 </thead>
                 <tbody>
