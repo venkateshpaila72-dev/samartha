@@ -157,22 +157,8 @@ async def dispatch_whatsapp_alert(
             detail=err,
         )
 
-    # Traditional guidance retrieval
     crop_profile = CropRepository.get_by_id(batch.get("crop_id", "")) or {}
     crop_name = alert.get("crop_name") or crop_profile.get("crop_name", "Crop")
-    traditional_guidance = ""
-    try:
-        query = f"{crop_name} traditional preservation {alert.get('condition_type', '')}"
-        rag_refs = RAGAdapter.retrieve_relevant_knowledge(query=query, crop_name=crop_name, top_k=2)
-        if rag_refs:
-            top_r = rag_refs[0]
-            traditional_guidance = f"{top_r.title}: {top_r.content_excerpt}"
-    except Exception:
-        pass
-    if not traditional_guidance:
-        methods = crop_profile.get("traditional_storage_methods") or []
-        if methods:
-            traditional_guidance = methods[0]
 
     delivery_res = await WhatsAppClient.send_alert_notification(
         phone_number=normalized_phone,
@@ -184,11 +170,11 @@ async def dispatch_whatsapp_alert(
         measured_value=alert.get("measured_value", 0.0),
         unit=alert.get("unit", "°C"),
         recommended_action=alert.get("recommended_action", "Check storage conditions immediately."),
-        traditional_guidance=traditional_guidance,
         preferred_language=(owner or {}).get("preferred_language", "en"),
         target_threshold=alert.get("target_threshold"),
         target_range_min=alert.get("target_range_min"),
         target_range_max=alert.get("target_range_max"),
+        reading_time=alert.get("created_at"),
         alert_id=alert_id,
         is_sandbox_opted_in=(owner or {}).get("whatsapp_opt_in_completed"),
     )

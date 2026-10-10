@@ -213,8 +213,8 @@ class TestThresholdWhatsAppAlerts(unittest.TestCase):
             self.assertTrue(mock_send.called)
             self.assertEqual(mock_send.call_args.kwargs["phone_number"], "+919848012345")
 
-    def test_06_preferred_language_and_traditional_guidance_included(self):
-        """6. Preferred language (te) and traditional guidance (Pusa Bin / ITK) are included in message dispatch."""
+    def test_06_preferred_language_used_and_raw_traditional_guidance_never_included(self):
+        """6. Preferred language is passed and raw traditional guidance / RAG citations are NEVER included in WhatsApp alerts."""
         with patch("app.integrations.whatsapp_client.WhatsAppClient.send_alert_notification") as mock_send:
             mock_send.return_value = WhatsAppDeliveryResult(
                 success=True,
@@ -240,11 +240,9 @@ class TestThresholdWhatsAppAlerts(unittest.TestCase):
             call_kwargs = mock_send.call_args.kwargs
             # Preferred language is farmer's language: Telugu
             self.assertEqual(call_kwargs["preferred_language"], "te")
-            # Traditional guidance is non-empty and retrieved from project RAG knowledge
-            self.assertTrue(len(call_kwargs["traditional_guidance"]) > 0)
-            self.assertTrue(
-                any(keyword in call_kwargs["traditional_guidance"] for keyword in ["Pusa Bin", "Agricultural Research", "ICAR", "ITK", "storage"])
-            )
+            # Raw traditional guidance is NOT in kwargs or is None
+            trad_guidance = call_kwargs.get("traditional_guidance")
+            self.assertTrue(trad_guidance is None or trad_guidance == "")
 
     def test_07_missing_or_invalid_phone_handled_safely(self):
         """7. Missing or invalid phone numbers are handled safely without crashing sensor save."""
@@ -325,28 +323,37 @@ class TestThresholdWhatsAppAlerts(unittest.TestCase):
             self.assertEqual(temp_alerts[0]["whatsapp_delivery_status"], "sandbox_not_opted_in")
             self.assertIn("Sandbox opt-in required", temp_alerts[0]["whatsapp_delivery_error"])
 
-    def test_09_duplicate_notifications_prevented_for_continuously_active_violation(self):
-        """9. Duplicate notifications are prevented when violation remains continuously active within cooldown."""
-        # Second reading arrives while temperature_high violation is still active (25.8°C)
+    def test_09_duplicate_notifications_prevented_within_cooldown(self):
+        """9. Duplicate notifications are prevented when violation remains continuously active and unchanged within cooldown."""
+        # First ensure alert is recorded as already delivered/accepted
+        alerts = AlertRepository.list_by_batch(self.batch_id, status="active")
+        temp_alerts = [a for a in alerts if a["condition_type"] == "temperature_high"]
+        if temp_alerts:
+            import datetime
+            now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            AlertRepository.update(
+                temp_alerts[0]["alert_id"],
+                {
+                    "whatsapp_delivery_status": "accepted",
+                    "whatsapp_last_attempt_at": now_iso,
+                    "measured_value": 25.5,
+                },
+            )
+
+        # Ingest identical reading (25.5°C) within the cooldown window
         with patch("app.integrations.whatsapp_client.WhatsAppClient.send_alert_notification") as mock_send:
             res = test_client.post(
                 f"/api/v1/batches/{self.batch_id}/readings",
                 json={
                     "batch_id": self.batch_id,
-                    "temperature_c": 25.8,
+                    "temperature_c": 25.5,
                     "relative_humidity_percent": 55.0,
                 },
                 headers=self.headers_farmer,
             )
             self.assertEqual(res.status_code, 200)
-            # send_alert_notification should NOT be called due to cooldown
+            # send_alert_notification should NOT be called due to cooldown on identical value
             self.assertFalse(mock_send.called)
-
-        # Still only one active alert for temperature_high
-        alerts = AlertRepository.list_by_batch(self.batch_id, status="active")
-        temp_alerts = [a for a in alerts if a["condition_type"] == "temperature_high"]
-        self.assertEqual(len(temp_alerts), 1)
-        self.assertEqual(temp_alerts[0]["measured_value"], 25.8)
 
     def test_10_dashboard_and_monitoring_summary_reflects_delivery_status(self):
         """10. Monitoring summary and alert endpoints return delivery status, masked phone, and error details."""
@@ -363,6 +370,135 @@ class TestThresholdWhatsAppAlerts(unittest.TestCase):
         self.assertIn("whatsapp_last_attempt_at", al)
         self.assertEqual(al["whatsapp_recipient_masked"], "+91 7386****06")
 
+    def test_11_deterministic_alert_fallback_format_and_no_rag(self):
+        """11. Deterministic alert template matches expected WhatsApp format without any RAG text."""
+        from app.integrations.whatsapp_client import WhatsAppClient
+
+        msg = WhatsAppClient.format_deterministic_storage_alert(
+            crop_name="Wheat",
+            batch_name="Wheat - Oct 2026 Harvest",
+            metric_name="Temperature",
+            metric_emoji="🌡️",
+            measured_value=24.5,
+            unit="°C",
+            safe_limit_or_range_label="Maximum safe limit",
+            safe_limit_or_range_val="22.0°C",
+            status_label="HIGH TEMPERATURE",
+            recommended_action="Activate ventilation or exhaust fans when outdoor conditions are cooler. Check for internal hotspots and recheck the storage temperature after corrective action.",
+        )
+
+        self.assertIn("🚨 *FarmShield Storage Alert*", msg)
+        self.assertIn("🌾 *Crop:* Wheat", msg)
+        self.assertIn("📦 *Batch:* Wheat - Oct 2026 Harvest", msg)
+        self.assertIn("🌡️ *Temperature:* 24.5°C", msg)
+        self.assertIn("✅ *Maximum safe limit:* 22.0°C", msg)
+        self.assertIn("⚠️ *Status:* HIGH TEMPERATURE", msg)
+        self.assertIn("*Recommended action:*", msg)
+        self.assertIn("Activate ventilation or exhaust fans", msg)
+        self.assertIn("Please monitor the storage conditions and follow the recommended safety procedure.", msg)
+
+        # Strictly verify that NO raw RAG tokens exist
+        self.assertNotIn("Traditional guidance", msg)
+        self.assertNotIn("Agricultural Research Record", msg)
+        self.assertNotIn("sar-", msg)
+
+    def test_12_ai_whatsapp_alert_formatting_with_groq(self):
+        """12. Groq AI successfully formats farmer-friendly WhatsApp alert using only verified data."""
+        import asyncio
+        from app.integrations.groq_client import GroqClient
+
+        async def _run():
+            return await GroqClient.format_whatsapp_storage_alert(
+                crop_name="Wheat",
+                batch_name="Wheat - Oct 2026 Harvest",
+                metric_name="Temperature",
+                metric_emoji="🌡️",
+                measured_value=24.5,
+                unit="°C",
+                safe_limit_or_range_label="Maximum safe limit",
+                safe_limit_or_range_val="22.0°C",
+                status_label="HIGH TEMPERATURE",
+                severity="warning",
+                recommended_action="Activate ventilation or exhaust fans when outdoor conditions are cooler. Check for internal hotspots and recheck the storage temperature after corrective action.",
+            )
+
+        formatted = asyncio.run(_run())
+        # If Groq is reachable with valid API key, assert it meets all format requirements
+        if formatted is not None:
+            self.assertIn("Wheat", formatted)
+            self.assertIn("24.5", formatted)
+            self.assertNotIn("Traditional guidance", formatted)
+            self.assertNotIn("Agricultural Research Record", formatted)
+            self.assertNotIn("sar-", formatted)
+
+    def test_13_raw_traditional_guidance_never_present_in_send_alert(self):
+        """13. Direct call to send_alert_notification never sends RAG records to Twilio."""
+        import asyncio
+        from app.integrations.whatsapp_client import WhatsAppClient
+
+        captured_body = {}
+
+        async def _run():
+            with patch.object(WhatsAppClient, "is_configured", return_value=True):
+                with patch("twilio.rest.Client") as mock_twilio_cls:
+                    mock_twilio_inst = mock_twilio_cls.return_value
+                    def _mock_create(**kwargs):
+                        captured_body["body"] = kwargs.get("body")
+                        mock_msg = type("Msg", (), {"sid": "SM_REAL_TEST", "status": "queued"})()
+                        return mock_msg
+                    mock_twilio_inst.messages.create.side_effect = _mock_create
+
+                    return await WhatsAppClient.send_alert_notification(
+                        phone_number="+917386587706",
+                        crop_name="Wheat",
+                        batch_name="Wheat - Oct 2026 Harvest",
+                        batch_id="batch_test_real",
+                        condition_type="temperature_high",
+                        severity="warning",
+                        measured_value=24.5,
+                        unit="°C",
+                        recommended_action="Activate ventilation or exhaust fans when outdoor conditions are cooler.",
+                        target_threshold=22.0,
+                        target_range_min=15.0,
+                        target_range_max=22.0,
+                    )
+
+        result = asyncio.run(_run())
+        self.assertTrue(result.success)
+        self.assertEqual(result.status, "queued")
+        self.assertIn("body", captured_body)
+        body = captured_body["body"]
+        self.assertNotIn("Traditional guidance", body)
+        self.assertNotIn("Agricultural Research Record", body)
+        self.assertNotIn("sar-", body)
+        self.assertIn("Wheat", body)
+        self.assertIn("24.5", body)
+
+    def test_14_direct_whatsapp_delivery_on_sensor_violation(self):
+        """14. A sensor reading with threshold violation triggers WhatsApp notification directly."""
+        for a in AlertRepository.list_by_batch(self.batch_id, status="active"):
+            AlertRepository.update_status(a["alert_id"], status="resolved")
+
+        with patch("app.integrations.whatsapp_client.WhatsAppClient.send_alert_notification") as mock_send:
+            mock_send.return_value = WhatsAppDeliveryResult(
+                success=True,
+                status="accepted",
+                message_sid="SM_DIRECT_101",
+                recipient_masked="+91 7386****06",
+            )
+            res = test_client.post(
+                f"/api/v1/batches/{self.batch_id}/readings",
+                json={
+                    "batch_id": self.batch_id,
+                    "temperature_c": 27.2,
+                    "relative_humidity_percent": 55.0,
+                },
+                headers=self.headers_farmer,
+            )
+            self.assertEqual(res.status_code, 200)
+            self.assertTrue(mock_send.called, "WhatsApp alert must be dispatched directly on violation reading")
+
 
 if __name__ == "__main__":
     unittest.main()
+

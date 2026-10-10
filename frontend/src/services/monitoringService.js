@@ -40,7 +40,13 @@ export const monitoringService = {
     const res = await apiRequest(`/alerts/${alertId}/dispatch-whatsapp`, {
       method: 'POST',
     });
-    return res.data;
+    return {
+      success: res?.success ?? res?.data?.dispatched ?? false,
+      message: res?.message || (res?.data?.dispatched ? 'WhatsApp notification dispatched via Twilio.' : 'WhatsApp notification failed.'),
+      data: res?.data || res,
+      status: res?.data?.status || res?.status,
+      ...res,
+    };
   },
 };
 

@@ -47,9 +47,15 @@ export default function AlertsPage({ activeBatch }) {
     setDispatchMessage(null);
     try {
       const res = await monitoringService.dispatchWhatsAppAlert(alertId);
+      const isSuccess = Boolean(
+        res?.success ||
+        res?.dispatched ||
+        res?.data?.dispatched ||
+        ['accepted', 'queued', 'sent', 'delivered'].includes(res?.status || res?.data?.status)
+      );
       setDispatchMessage({
-        type: res.success ? 'success' : 'error',
-        text: res.message || (res.success ? 'WhatsApp alert dispatched.' : 'WhatsApp alert failed.'),
+        type: isSuccess ? 'success' : 'error',
+        text: res?.message || (isSuccess ? 'WhatsApp notification dispatched via Twilio.' : 'WhatsApp alert failed.'),
       });
       await loadAlerts();
     } catch (err) {

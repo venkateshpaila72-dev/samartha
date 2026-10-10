@@ -8,7 +8,6 @@ import logging
 import uuid
 from typing import Optional
 
-from app.integrations.rag_adapter import RAGAdapter
 from app.integrations.whatsapp_client import WhatsAppClient
 from app.monitoring.rules import (
     evaluate_measurement_rules,
@@ -185,6 +184,19 @@ class MonitoringService:
             else:
                 # Continuously active violation: update reading on existing alert
                 alert_id = existing_alert["alert_id"]
+                old_val = existing_alert.get("measured_value", v.measured_value)
+                old_status = (existing_alert.get("whatsapp_delivery_status") or "").lower()
+
+                # Update in-memory dict so dispatch uses latest sensor measurement
+                existing_alert["measured_value"] = v.measured_value
+                existing_alert["severity"] = v.severity
+                existing_alert["message"] = v.message
+                existing_alert["target_threshold"] = v.target_threshold
+                existing_alert["target_range_min"] = v.target_min
+                existing_alert["target_range_max"] = v.target_max
+                existing_alert["recommended_action"] = v.recommended_action
+                existing_alert["created_at"] = now_iso
+
                 AlertRepository.update(
                     alert_id,
                     {
@@ -194,13 +206,22 @@ class MonitoringService:
                         "target_threshold": v.target_threshold,
                         "target_range_min": v.target_min,
                         "target_range_max": v.target_max,
+                        "recommended_action": v.recommended_action,
                     },
                 )
 
-                # Check cooldown to avoid spamming the farmer
+                # Direct WhatsApp delivery on violation reading:
+                # Renotify immediately if:
+                # 1. Previous delivery attempt did not succeed (pending, failed, sandbox_not_opted_in, invalid_phone_number)
+                # 2. Or the measured value changed significantly (abs(v.measured_value - old_val) >= 0.1)
+                # 3. Or at least 60 seconds have elapsed since last attempt
                 last_attempt_iso = existing_alert.get("whatsapp_last_attempt_at")
                 should_renotify = False
                 if not last_attempt_iso:
+                    should_renotify = True
+                elif old_status not in ("accepted", "queued", "sent", "delivered"):
+                    should_renotify = True
+                elif abs(v.measured_value - float(old_val)) >= 0.1:
                     should_renotify = True
                 else:
                     try:
@@ -208,7 +229,7 @@ class MonitoringService:
                         if last_dt.tzinfo is None:
                             last_dt = last_dt.replace(tzinfo=datetime.timezone.utc)
                         now_dt = datetime.datetime.now(datetime.timezone.utc)
-                        if (now_dt - last_dt).total_seconds() >= ALERT_COOLDOWN_SECONDS:
+                        if (now_dt - last_dt).total_seconds() >= 60:
                             should_renotify = True
                     except Exception:
                         should_renotify = True
@@ -293,28 +314,8 @@ class MonitoringService:
             return
 
         target_phone = prefs.get("whatsapp_phone_number") or owner.get("phone_number")
-
-        # Retrieve relevant traditional storage knowledge via RAG and crop profile
-        traditional_guidance = ""
         crop_name = crop_profile.get("crop_name", alert_doc.get("crop_name", "Crop"))
         cond_type = alert_doc.get("condition_type", "temperature_high")
-        try:
-            query = f"{crop_name} traditional preservation {cond_type.replace('_', ' ')}"
-            rag_refs = RAGAdapter.retrieve_relevant_knowledge(
-                query=query,
-                crop_name=crop_name,
-                top_k=2,
-            )
-            if rag_refs:
-                top_ref = rag_refs[0]
-                traditional_guidance = f"{top_ref.title}: {top_ref.content_excerpt}"
-        except Exception as rag_err:
-            logger.warning("RAG retrieval error during WhatsApp dispatch: %s", rag_err)
-
-        if not traditional_guidance:
-            methods = crop_profile.get("traditional_storage_methods") or []
-            if methods:
-                traditional_guidance = methods[0]
 
         delivery_result = await WhatsAppClient.send_alert_notification(
             phone_number=target_phone,
@@ -326,11 +327,11 @@ class MonitoringService:
             measured_value=alert_doc.get("measured_value", 0.0),
             unit=alert_doc.get("unit", "°C"),
             recommended_action=alert_doc.get("recommended_action", "Check storage conditions immediately."),
-            traditional_guidance=traditional_guidance,
             preferred_language=owner.get("preferred_language", "en"),
             target_threshold=alert_doc.get("target_threshold"),
             target_range_min=alert_doc.get("target_range_min"),
             target_range_max=alert_doc.get("target_range_max"),
+            reading_time=alert_doc.get("created_at"),
             alert_id=alert_id,
             is_sandbox_opted_in=owner.get("whatsapp_opt_in_completed"),
         )

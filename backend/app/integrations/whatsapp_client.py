@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.db.collection_names import NOTIFICATION_LOGS_COLLECTION
 from app.db.mongo import get_db
 from app.integrations.azure_translator_client import AzureTranslatorClient
+from app.integrations.groq_client import GroqClient
 from app.monitoring.rules import mask_phone_number, normalize_phone_number
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,9 @@ class WhatsAppDeliveryResult:
 
 
 class WhatsAppClient:
-    """Twilio WhatsApp client; messages follow the recipient's saved language and verified farmer profile."""
+    """Twilio WhatsApp client; formats alerts with Groq AI or clean deterministic template,
+    never leaks raw RAG or traditional research text, and tracks verified delivery.
+    """
 
     @classmethod
     def is_configured(cls) -> bool:
@@ -54,6 +57,45 @@ class WhatsAppClient:
         token = settings.TWILIO_AUTH_TOKEN.strip()
         sender = settings.TWILIO_WHATSAPP_FROM.strip()
         return bool(sid and token and sender and not sid.startswith("your_"))
+
+    @classmethod
+    def format_deterministic_storage_alert(
+        cls,
+        crop_name: str,
+        batch_name: str,
+        metric_name: str,
+        metric_emoji: str,
+        measured_value: float,
+        unit: str,
+        safe_limit_or_range_label: str,
+        safe_limit_or_range_val: str,
+        status_label: str,
+        recommended_action: str,
+        reading_time: Optional[str] = None,
+    ) -> str:
+        """Constructs a clean, deterministic WhatsApp alert template matching expected layout.
+        Guarantees zero raw RAG text, research abstracts, or chunk citations.
+        """
+        lines = [
+            "🚨 *FarmShield Storage Alert*",
+            "",
+            f"🌾 *Crop:* {crop_name}",
+            f"📦 *Batch:* {batch_name}",
+            "",
+            f"{metric_emoji} *{metric_name}:* {measured_value:.1f}{unit}",
+            f"✅ *{safe_limit_or_range_label}:* {safe_limit_or_range_val}",
+            f"⚠️ *Status:* {status_label}",
+        ]
+        if reading_time:
+            lines.append(f"⏱️ *Time:* {reading_time}")
+        lines.extend([
+            "",
+            "*Recommended action:*",
+            f"{recommended_action}",
+            "",
+            "Please monitor the storage conditions and follow the recommended safety procedure.",
+        ])
+        return "\n".join(lines)
 
     @classmethod
     async def send_alert_notification(
@@ -66,7 +108,6 @@ class WhatsAppClient:
         recommended_action: str,
         batch_id: str,
         preferred_language: str = "en",
-        traditional_guidance: str = "",
         batch_name: Optional[str] = None,
         severity: str = "warning",
         target_threshold: Optional[float] = None,
@@ -74,6 +115,9 @@ class WhatsAppClient:
         target_range_max: Optional[float] = None,
         alert_id: Optional[str] = None,
         is_sandbox_opted_in: Optional[bool] = None,
+        reading_time: Optional[str] = None,
+        # Backward compatibility for any remaining legacy callers
+        traditional_guidance: Optional[str] = None,
     ) -> WhatsAppDeliveryResult:
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         log_id = f"notif_{uuid.uuid4().hex[:10]}"
@@ -117,35 +161,94 @@ class WhatsAppClient:
             cls._record_log(log_id, batch_id, alert_id, masked_phone, None, status, err_msg, lang, now_iso)
             return result
 
-        # 3. Construct structured actionable guidance message
+        # 3. Derive verified parameter labels, emoji, and safe thresholds
         display_batch_name = batch_name or f"{crop_name} Batch"
         cond_label = condition_type.replace("_", " ").upper()
-        if target_range_min is not None and target_range_max is not None:
-            range_str = f"{target_range_min:.1f}{unit}–{target_range_max:.1f}{unit}"
-        elif target_threshold is not None:
-            range_str = f"{target_threshold:.1f}{unit}"
-        else:
-            range_str = "Verified Scientific Storage Limits"
 
         metric_name = "Reading"
-        if "temperature" in condition_type:
-            metric_name = "temperature"
-        elif "humidity" in condition_type:
-            metric_name = "humidity"
-        elif "moisture" in condition_type:
-            metric_name = "grain moisture"
+        metric_emoji = "📊"
+        cond_lower = condition_type.lower()
+        if "temperature" in cond_lower:
+            metric_name = "Temperature"
+            metric_emoji = "🌡️"
+        elif "humidity" in cond_lower:
+            metric_name = "Humidity"
+            metric_emoji = "💧"
+        elif "moisture" in cond_lower:
+            metric_name = "Moisture"
+            metric_emoji = "🌾"
 
-        message_body = (
-            f"FarmShield Storage Alert\n\n"
-            f"Crop: {crop_name}\n"
-            f"Batch: {display_batch_name}\n"
-            f"Current {metric_name}: {measured_value:.1f}{unit}\n"
-            f"Safe range: {range_str}\n"
-            f"Status: {cond_label}\n\n"
-            f"Technical action:\n{recommended_action}\n\n"
-            f"Traditional guidance:\n{traditional_guidance or 'Follow the verified crop-specific traditional storage practices in your FarmShield dashboard.'}\n\n"
-            f"Please recheck the readings after taking corrective action."
-        )
+        if target_range_min is not None and target_range_max is not None:
+            if measured_value > target_range_max:
+                limit_label = "Maximum safe limit"
+                limit_val = f"{target_range_max:.1f}{unit}"
+            elif measured_value < target_range_min:
+                limit_label = "Minimum safe limit"
+                limit_val = f"{target_range_min:.1f}{unit}"
+            else:
+                limit_label = "Safe range"
+                limit_val = f"{target_range_min:.1f}{unit}–{target_range_max:.1f}{unit}"
+        elif target_threshold is not None:
+            limit_label = "Maximum safe limit" if "high" in cond_lower else "Minimum safe limit"
+            limit_val = f"{target_threshold:.1f}{unit}"
+        else:
+            limit_label = "Safe threshold"
+            limit_val = f"Verified scientific limits"
+
+        # 4. Generate AI formatted message via Groq with deterministic fallback
+        message_body: Optional[str] = None
+        try:
+            message_body = await GroqClient.format_whatsapp_storage_alert(
+                crop_name=crop_name,
+                batch_name=display_batch_name,
+                metric_name=metric_name,
+                metric_emoji=metric_emoji,
+                measured_value=measured_value,
+                unit=unit,
+                safe_limit_or_range_label=limit_label,
+                safe_limit_or_range_val=limit_val,
+                status_label=cond_label,
+                severity=severity,
+                recommended_action=recommended_action,
+                reading_time=reading_time,
+            )
+        except Exception as ai_err:
+            logger.warning("Groq AI WhatsApp alert generation error: %s", ai_err)
+            message_body = None
+
+        # Clean fallback if AI fails or returns empty/invalid text
+        if not message_body:
+            message_body = cls.format_deterministic_storage_alert(
+                crop_name=crop_name,
+                batch_name=display_batch_name,
+                metric_name=metric_name,
+                metric_emoji=metric_emoji,
+                measured_value=measured_value,
+                unit=unit,
+                safe_limit_or_range_label=limit_label,
+                safe_limit_or_range_val=limit_val,
+                status_label=cond_label,
+                recommended_action=recommended_action,
+                reading_time=reading_time,
+            )
+
+        # Enforce that raw RAG text is NEVER included in WhatsApp messages
+        lower_body = message_body.lower()
+        if "traditional guidance" in lower_body or "agricultural research record" in lower_body or "sar-" in lower_body:
+            logger.warning("Detected forbidden RAG tokens in generated alert body; replacing with deterministic fallback.")
+            message_body = cls.format_deterministic_storage_alert(
+                crop_name=crop_name,
+                batch_name=display_batch_name,
+                metric_name=metric_name,
+                metric_emoji=metric_emoji,
+                measured_value=measured_value,
+                unit=unit,
+                safe_limit_or_range_label=limit_label,
+                safe_limit_or_range_val=limit_val,
+                status_label=cond_label,
+                recommended_action=recommended_action,
+                reading_time=reading_time,
+            )
 
         # 4. Localize message into farmer's preferred language with safe fallback
         if lang != "en":
