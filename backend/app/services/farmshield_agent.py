@@ -38,8 +38,8 @@ class FarmShieldAgent:
                 # Keep the original safe text if the translation provider is unavailable.
                 return value
 
-        report.recommendation, report.forecast_note = await asyncio.gather(
-            tr(report.recommendation), tr(report.forecast_note)
+        report.crop_name, report.recommendation, report.forecast_note = await asyncio.gather(
+            tr(report.crop_name), tr(report.recommendation), tr(report.forecast_note)
         )
         # Translate user-visible market labels while preserving numeric values and dates.
         for item in report.latest_prices:
