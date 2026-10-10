@@ -44,6 +44,9 @@ class UserOut(BaseModel):
     phone_number: Optional[str] = None
     village_or_location: Optional[str] = None
     whatsapp_url: Optional[str] = None
+    selected_crop: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
     created_at: Optional[str] = None
 
 
@@ -53,6 +56,9 @@ class UserUpdate(BaseModel):
     phone_number: Optional[str] = None
     village_or_location: Optional[str] = None
     whatsapp_url: Optional[str] = None
+    selected_crop: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    state: Optional[str] = Field(default=None, max_length=100)
+    district: Optional[str] = Field(default=None, max_length=100)
 
 
 Token.model_rebuild()
