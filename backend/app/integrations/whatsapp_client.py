@@ -78,13 +78,14 @@ class WhatsAppClient:
 
                 msg_sid, msg_status = await asyncio.to_thread(_send_sync)
                 sid_or_id = msg_sid
-                status = "delivered" if msg_status in ["queued", "sent", "delivered", "accepted"] else msg_status
+                status = msg_status.lower() if msg_status else "sent"
             except Exception as e:
                 status = "provider_error"
                 err_msg = str(e)
                 logger.error(f"Twilio WhatsApp notification failed: {e}")
         else:
-            status = "pending_whatsapp_credentials"
+            status = "credentials_missing"
+            err_msg = "Twilio credentials are not configured in environment."
 
         log_doc = {
             "log_id": log_id,
@@ -106,5 +107,5 @@ class WhatsAppClient:
                 logger.warning(f"Could not persist notification log: {db_err}")
 
         logger.info(f"Twilio WhatsApp alert log recorded: status={status} for batch={batch_id}")
-        return status in ["delivered", "queued", "sent", "simulated_success", "pending_whatsapp_credentials"]
+        return status in ["delivered", "queued", "sent", "accepted"]
 

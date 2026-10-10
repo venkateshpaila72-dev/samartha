@@ -1,6 +1,8 @@
 """Agricultural Market Price Client for FarmShield using AGMARKNET.
-Integrates commodity pricing from APMC mandis across India with resilience
-against external gateway connectivity issues.
+Integrates commodity pricing from APMC mandis across India with strict data integrity:
+- Never substitutes an unknown crop with Wheat.
+- Returns explicit 'unavailable' state when price records do not exist.
+- Clearly marks reference samples without stamping misleading live arrival dates.
 """
 
 import datetime
@@ -15,7 +17,7 @@ from app.schemas.market import MarketPriceItem, MarketPriceReportOut
 
 logger = logging.getLogger(__name__)
 
-# Official AGMARKNET APMC benchmark price dataset across prominent agricultural states
+# Reference AGMARKNET APMC benchmark price dataset for verified storage crops
 AGMARKNET_BENCHMARKS: Dict[str, List[Dict[str, Any]]] = {
     "Paddy (Rice)": [
         {"market": "Karnal APMC", "district": "Karnal", "state": "Haryana", "modal": 2350.0, "min": 2180.0, "max": 2450.0, "variety": "Common"},
@@ -64,61 +66,75 @@ class MarketClient:
 
     @classmethod
     async def get_market_prices(cls, crop_name: str) -> MarketPriceReportOut:
-        now_date = datetime.date.today().isoformat()
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        clean_crop = crop_name.strip()
 
-        # Find closest crop benchmark key
-        matched_crop = "Wheat"
+        # Find matching crop key in benchmarks if any
+        matched_crop = None
         for key in AGMARKNET_BENCHMARKS.keys():
-            if key.lower() in crop_name.lower() or crop_name.lower() in key.lower():
+            if key.lower() in clean_crop.lower() or clean_crop.lower() in key.lower():
                 matched_crop = key
                 break
 
-        endpoint_url = settings.AGMARKNET_BASE_URL.strip() or "https://api.agmarknet.gov.in/v1"
-        is_live_retrieved = False
+        # 1. Try querying data.gov.in / AGMARKNET API if configured
+        api_key = settings.MARKET_API_KEY.strip()
+        base_url = settings.MARKET_API_BASE_URL.strip() or "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
         parsed_items: List[MarketPriceItem] = []
+        is_live = False
 
-        # 1. Attempt to query live AGMARKNET endpoint if accessible
-        try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                resp = await client.get(
-                    f"{endpoint_url}/prices",
-                    params={"commodity": matched_crop, "format": "json"},
-                )
-                if resp.status_code == 200:
-                    raw_data = resp.json()
-                    records = raw_data.get("data", raw_data.get("records", []))
-                    if isinstance(records, list) and len(records) > 0:
-                        for r in records[:10]:
+        if api_key and not api_key.startswith("your_"):
+            try:
+                params = {
+                    "api-key": api_key,
+                    "format": "json",
+                    "filters[commodity]": matched_crop or clean_crop,
+                    "limit": 10,
+                }
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    resp = await client.get(base_url, params=params)
+                    if resp.status_code == 200:
+                        records = resp.json().get("records", [])
+                        for r in records:
                             parsed_items.append(
                                 MarketPriceItem(
-                                    crop_name=matched_crop,
+                                    crop_name=clean_crop,
                                     variety=r.get("variety", "Standard"),
-                                    market_name=r.get("market") or r.get("market_name", "APMC Mandi"),
+                                    market_name=r.get("market", "APMC Mandi"),
                                     district=r.get("district", "N/A"),
                                     state=r.get("state", "India"),
-                                    modal_price_per_quintal=float(r.get("modal_price", r.get("modal", 2000.0))),
-                                    min_price_per_quintal=float(r.get("min_price", r.get("min", 1800.0))),
-                                    max_price_per_quintal=float(r.get("max_price", r.get("max", 2200.0))),
-                                    price_date=r.get("arrival_date", now_date),
-                                    source="AGMARKNET Live Gateway",
+                                    modal_price_per_quintal=float(r.get("modal_price", 0.0)),
+                                    min_price_per_quintal=float(r.get("min_price", 0.0)),
+                                    max_price_per_quintal=float(r.get("max_price", 0.0)),
+                                    price_date=r.get("arrival_date", "Live"),
+                                    source="data.gov.in / AGMARKNET API",
                                 )
                             )
-                        is_live_retrieved = True
-                else:
-                    logger.debug(
-                        f"AGMARKNET endpoint returned HTTP {resp.status_code}. "
-                        "Using verified AGMARKNET benchmark records with disclosure."
-                    )
-        except Exception as e:
-            logger.debug(f"AGMARKNET live query notice: {e}. Utilizing official AGMARKNET benchmark data.")
+                        if parsed_items:
+                            is_live = True
+            except Exception as e:
+                logger.debug(f"data.gov.in AGMARKNET query error: {e}")
 
-        # 2. Use official AGMARKNET reference records if live gateway is restricted / 403
-        if not is_live_retrieved or not parsed_items:
-            benchmarks = AGMARKNET_BENCHMARKS.get(matched_crop, AGMARKNET_BENCHMARKS["Wheat"])
-            parsed_items = []
+        # 2. If live query succeeded, build live report
+        if is_live and parsed_items:
+            total_modal = sum(item.modal_price_per_quintal for item in parsed_items)
+            avg_modal = round(total_modal / len(parsed_items), 2)
+            report = MarketPriceReportOut(
+                crop_name=clean_crop,
+                latest_prices=parsed_items,
+                average_modal_price=avg_modal,
+                price_trend="stable",
+                recommendation=f"Live APMC modal rates for {clean_crop} average ₹{avg_modal:,.0f}/quintal.",
+                retrieval_timestamp=now_iso,
+                freshness="live",
+            )
+            return report
+
+        # 3. Check if we have verified static benchmark for this specific crop
+        if matched_crop and matched_crop in AGMARKNET_BENCHMARKS:
+            benchmarks = AGMARKNET_BENCHMARKS[matched_crop]
+            items = []
             for b in benchmarks:
-                parsed_items.append(
+                items.append(
                     MarketPriceItem(
                         crop_name=matched_crop,
                         variety=b.get("variety", "Common"),
@@ -128,44 +144,29 @@ class MarketClient:
                         modal_price_per_quintal=b["modal"],
                         min_price_per_quintal=b["min"],
                         max_price_per_quintal=b["max"],
-                        price_date=now_date,
+                        price_date="Reference Benchmark",
                         source="AGMARKNET / Directorate of Marketing & Inspection",
                     )
                 )
+            total_modal = sum(item.modal_price_per_quintal for item in items)
+            avg_modal = round(total_modal / len(items), 2)
+            return MarketPriceReportOut(
+                crop_name=clean_crop,
+                latest_prices=items,
+                average_modal_price=avg_modal,
+                price_trend="stable",
+                recommendation="Static reference sample for agricultural planning. Consult local APMC mandis for live day-of trading rates.",
+                retrieval_timestamp=now_iso,
+                freshness="reference_sample",
+            )
 
-        # Compute summary statistics
-        total_modal = sum(item.modal_price_per_quintal for item in parsed_items)
-        avg_modal = round(total_modal / len(parsed_items), 2) if parsed_items else 2200.0
-
-        recommendation = (
-            f"Current average modal price for {matched_crop} is ₹{avg_modal:,.0f}/quintal across mandis. "
-            "If your crop storage moisture and temperature remain within optimal safety thresholds, "
-            "retaining stock through the peak harvest arrival window (30-60 days) typically captures "
-            "higher off-season realizations."
-        )
-
-        freshness_status = "live" if is_live_retrieved else "official_agmarknet_benchmark"
-
-        report = MarketPriceReportOut(
-            crop_name=matched_crop,
-            latest_prices=parsed_items,
-            average_modal_price=avg_modal,
-            price_trend="rising" if avg_modal >= 2400 else "stable",
-            recommendation=recommendation,
+        # 4. No data for this crop — DO NOT substitute Wheat or another crop!
+        return MarketPriceReportOut(
+            crop_name=clean_crop,
+            latest_prices=[],
+            average_modal_price=None,
+            price_trend="unknown",
+            recommendation=f"Mandi price data is currently unavailable for '{clean_crop}'. Please check your regional APMC mandi board.",
             retrieval_timestamp=now_iso,
-            freshness=freshness_status,
+            freshness="unavailable",
         )
-
-        # Cache in MongoDB if available
-        db = get_db()
-        if db is not None:
-            try:
-                db[MARKET_PRICES_COLLECTION].update_one(
-                    {"crop_name": matched_crop},
-                    {"$set": report.model_dump()},
-                    upsert=True,
-                )
-            except Exception as e:
-                logger.warning(f"Could not cache market price in MongoDB: {e}")
-
-        return report

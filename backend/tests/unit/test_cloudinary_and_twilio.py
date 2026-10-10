@@ -11,15 +11,21 @@ from app.core.config import settings
 class TestSynchronizedIntegrations(unittest.TestCase):
     def test_cloudinary_configuration(self):
         """Verifies Cloudinary configuration check and settings presence."""
-        is_conf = CloudinaryClient.is_configured()
-        self.assertTrue(is_conf, "Cloudinary should be detected as configured from .env")
-        self.assertEqual(settings.STORAGE_PROVIDER, "cloudinary")
+        from unittest.mock import patch
+        with patch.object(settings, "CLOUDINARY_CLOUD_NAME", "sample_cloud"), \
+             patch.object(settings, "CLOUDINARY_API_KEY", "12345"), \
+             patch.object(settings, "CLOUDINARY_API_SECRET", "secret"):
+            is_conf = CloudinaryClient.is_configured()
+            self.assertTrue(is_conf, "Cloudinary should be detected as configured")
 
     def test_twilio_configuration(self):
         """Verifies Twilio WhatsApp configuration check."""
-        is_conf = WhatsAppClient.is_configured()
-        self.assertTrue(is_conf, "Twilio should be detected as configured from .env")
-        self.assertTrue(settings.TWILIO_WHATSAPP_FROM.startswith("whatsapp:"))
+        from unittest.mock import patch
+        with patch.object(settings, "TWILIO_ACCOUNT_SID", "AC12345"), \
+             patch.object(settings, "TWILIO_AUTH_TOKEN", "auth123"), \
+             patch.object(settings, "TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886"):
+            is_conf = WhatsAppClient.is_configured()
+            self.assertTrue(is_conf, "Twilio should be detected as configured")
 
     def test_weather_client_mappings(self):
         """Verifies Open-Meteo coordinates lookup and WMO weather codes."""

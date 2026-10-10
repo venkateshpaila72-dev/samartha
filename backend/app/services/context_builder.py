@@ -37,7 +37,8 @@ class AIContextBuilder:
 
         if batch_id:
             batch = StorageBatchRepository.get_by_id(batch_id)
-            if batch:
+            owner_id = batch.get("user_id") or batch.get("farmer_id") if batch else None
+            if batch and owner_id == user_id:
                 context["has_batch_context"] = True
                 context["batch_metadata"] = {
                     "batch_id": batch.get("batch_id"),

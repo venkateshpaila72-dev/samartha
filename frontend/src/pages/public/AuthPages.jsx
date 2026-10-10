@@ -8,7 +8,6 @@ export default function AuthPages() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState('farmer');
   const [language, setLanguage] = useState('en');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -23,7 +22,6 @@ export default function AuthPages() {
           email,
           password,
           full_name: fullName,
-          role,
           preferred_language: language,
         });
       } else {
@@ -36,10 +34,11 @@ export default function AuthPages() {
     }
   };
 
-  const handleQuickDemo = async (demoRole) => {
+  const handleQuickDemo = async () => {
+    if (!import.meta.env.DEV) return;
     setLoading(true);
     setError(null);
-    const demoEmail = demoRole === 'admin' ? 'admin_demo@farmshield.org' : 'farmer_demo@farmshield.org';
+    const demoEmail = 'farmer_demo@farmshield.org';
     const demoPass = 'DemoPassword123';
     try {
       try {
@@ -48,10 +47,9 @@ export default function AuthPages() {
         await register({
           email: demoEmail,
           password: demoPass,
-          full_name: demoRole === 'admin' ? 'System Administrator' : 'Kisan Ramesh Patel',
-          role: demoRole,
+          full_name: 'Kisan Ramesh Patel',
           preferred_language: 'en',
-          village_or_location: demoRole === 'admin' ? 'HQ New Delhi' : 'Nashik Granary',
+          village_or_location: 'Nashik Granary',
         });
       }
     } catch (err) {
@@ -97,36 +95,28 @@ export default function AuthPages() {
           </p>
         </div>
 
-        {/* Quick Demo Login Buttons */}
-        <div style={{
-          background: 'rgba(15, 23, 42, 0.7)',
-          padding: '14px',
-          borderRadius: '12px',
-          marginBottom: '20px',
-          border: '1px solid rgba(255, 255, 255, 0.08)'
-        }}>
-          <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '8px', textAlign: 'center', fontWeight: '600', textTransform: 'uppercase' }}>
-            ⚡ Instant 1-Click Demo Access
-          </span>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+        {/* Quick Demo Login Button (Dev mode only) */}
+        {import.meta.env.DEV && (
+          <div style={{
+            background: 'rgba(15, 23, 42, 0.7)',
+            padding: '12px 14px',
+            borderRadius: '12px',
+            marginBottom: '20px',
+            border: '1px solid rgba(255, 255, 255, 0.08)'
+          }}>
+            <span style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'block', marginBottom: '8px', textAlign: 'center', fontWeight: '600', textTransform: 'uppercase' }}>
+              ⚡ Development Mode Quick Access
+            </span>
             <button
               type="button"
               className="btn-secondary"
-              onClick={() => handleQuickDemo('farmer')}
-              style={{ fontSize: '0.82rem', padding: '8px 12px', justifyContent: 'center' }}
+              onClick={handleQuickDemo}
+              style={{ width: '100%', fontSize: '0.82rem', padding: '8px 12px', justifyContent: 'center' }}
             >
-              <UserCheck size={14} color="#10b981" /> Farmer Demo
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={() => handleQuickDemo('admin')}
-              style={{ fontSize: '0.82rem', padding: '8px 12px', justifyContent: 'center', color: '#fbbf24' }}
-            >
-              <ShieldAlert size={14} color="#f59e0b" /> Admin Demo
+              <UserCheck size={14} color="#10b981" /> Kisan Farmer Demo
             </button>
           </div>
-        </div>
+        )}
 
         {error && (
           <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#f87171', padding: '10px 14px', borderRadius: '8px', fontSize: '0.88rem', marginBottom: '16px' }}>
@@ -174,31 +164,18 @@ export default function AuthPages() {
           </div>
 
           {isRegister && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-              <div>
-                <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Role</label>
-                <select
-                  className="input-field"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                >
-                  <option value="farmer">Farmer</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-              <div>
-                <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Language</label>
-                <select
-                  className="input-field"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                >
-                  <option value="en">English</option>
-                  <option value="hi">हिंदी (Hindi)</option>
-                  <option value="te">తెలుగు (Telugu)</option>
-                  <option value="ta">தமிழ் (Tamil)</option>
-                </select>
-              </div>
+            <div>
+              <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Preferred Language</label>
+              <select
+                className="input-field"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+              >
+                <option value="en">English</option>
+                <option value="hi">हिंदी (Hindi)</option>
+                <option value="te">తెలుగు (Telugu)</option>
+                <option value="ta">தமிழ் (Tamil)</option>
+              </select>
             </div>
           )}
 

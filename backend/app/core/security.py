@@ -48,7 +48,7 @@ def create_access_token(
     data: dict[str, Any],
     expires_delta: Optional[timedelta] = None,
 ) -> str:
-    """Create a signed JWT access token."""
+    """Create a signed JWT access token with iss and aud claims."""
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
     if expires_delta:
@@ -56,7 +56,12 @@ def create_access_token(
     else:
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
-    to_encode.update({"exp": expire, "iat": now})
+    to_encode.update({
+        "exp": expire,
+        "iat": now,
+        "iss": "farmshield-api",
+        "aud": "farmshield-app",
+    })
     encoded_jwt = jwt.encode(
         to_encode,
         settings.JWT_SECRET_KEY,
@@ -66,12 +71,14 @@ def create_access_token(
 
 
 def decode_access_token(token: str) -> Optional[dict[str, Any]]:
-    """Decode and validate a JWT access token."""
+    """Decode and validate a JWT access token including iss and aud claims."""
     try:
         payload = jwt.decode(
             token,
             settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
+            issuer="farmshield-api",
+            audience="farmshield-app",
         )
         return payload
     except jwt.PyJWTError:

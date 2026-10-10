@@ -1,5 +1,6 @@
 """Weather Client for FarmShield using Open-Meteo API.
 Integrates live weather forecasts and determines ambient storage impact.
+Eliminates fabricated fallbacks and unknown location defaults.
 """
 
 import datetime
@@ -48,14 +49,23 @@ WMO_WEATHER_DESCRIPTIONS: dict[int, str] = {
     51: "Light Drizzle",
     53: "Moderate Drizzle",
     55: "Dense Drizzle",
+    56: "Light Freezing Drizzle",
+    57: "Dense Freezing Drizzle",
     61: "Slight Rain",
     62: "Moderate Rain",
-    63: "Heavy Rain",
+    63: "Moderate Rain",
     65: "Heavy Rain",
+    66: "Light Freezing Rain",
+    67: "Heavy Freezing Rain",
     71: "Slight Snow Fall",
+    73: "Moderate Snow Fall",
+    75: "Heavy Snow Fall",
+    77: "Snow Grains",
     80: "Slight Rain Showers",
     81: "Moderate Rain Showers",
     82: "Violent Rain Showers",
+    85: "Slight Snow Showers",
+    86: "Heavy Snow Showers",
     95: "Thunderstorm",
     96: "Thunderstorm with Slight Hail",
     99: "Thunderstorm with Heavy Hail",
@@ -66,7 +76,7 @@ class WeatherClient:
     """Retrieves live meteorological data from Open-Meteo."""
 
     @classmethod
-    async def _resolve_coordinates(cls, location_str: str) -> Tuple[float, float, str]:
+    async def _resolve_coordinates(cls, location_str: str) -> Tuple[Optional[float], Optional[float], str]:
         """Resolves location name to latitude and longitude."""
         cleaned = location_str.lower().split(",")[0].strip()
         if cleaned in KNOWN_LOCATIONS:
@@ -76,7 +86,7 @@ class WeatherClient:
         # Attempt Open-Meteo geocoding if not in local lookup
         try:
             geo_url = "https://geocoding-api.open-meteo.com/v1/search"
-            async with httpx.AsyncClient(timeout=4.0) as client:
+            async with httpx.AsyncClient(timeout=5.0) as client:
                 res = await client.get(geo_url, params={"name": cleaned, "count": 1})
                 if res.status_code == 200:
                     data = res.json()
@@ -87,13 +97,16 @@ class WeatherClient:
         except Exception as e:
             logger.debug(f"Geocoding lookup failed for '{location_str}': {e}")
 
-        # Default fallback coordinates: New Delhi
-        return 28.6139, 77.2090, location_str
+        # Return None rather than falsely claiming Delhi
+        return None, None, location_str
 
     @classmethod
     async def get_weather(cls, location: str = "New Delhi, IN") -> WeatherReportOut:
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         lat, lon, display_name = await cls._resolve_coordinates(location)
+
+        if lat is None or lon is None:
+            raise ValueError(f"Could not resolve geographic location for '{location}'. Please enter a recognized district or city name.")
 
         # 1. Fetch live data from Open-Meteo
         base_url = settings.OPEN_METEO_BASE_URL.strip() or "https://api.open-meteo.com/v1/forecast"
@@ -107,127 +120,98 @@ class WeatherClient:
             }
             async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.get(base_url, params=params)
-                if resp.status_code == 200:
-                    raw = resp.json()
-                    current = raw.get("current", {})
-                    hourly = raw.get("hourly", {})
+                if resp.status_code != 200:
+                    raise RuntimeError(f"Open-Meteo returned status {resp.status_code}")
 
-                    curr_temp = float(current.get("temperature_2m", 25.0))
-                    curr_rh = float(current.get("relative_humidity_2m", 50.0))
-                    w_code = int(current.get("weather_code", 0))
-                    condition_text = WMO_WEATHER_DESCRIPTIONS.get(w_code, "Partly Cloudy")
+                raw = resp.json()
+                current = raw.get("current", {})
+                hourly = raw.get("hourly", {})
 
-                    forecast_items: list[WeatherForecastItem] = []
-                    times = hourly.get("time", [])
-                    temps = hourly.get("temperature_2m", [])
-                    rhs = hourly.get("relative_humidity_2m", [])
-                    precips = hourly.get("precipitation_probability", [])
-                    winds = hourly.get("wind_speed_10m", [])
-                    codes = hourly.get("weather_code", [])
+                curr_temp = float(current.get("temperature_2m", 25.0))
+                curr_rh = float(current.get("relative_humidity_2m", 50.0))
+                w_code = int(current.get("weather_code", 0))
+                condition_text = WMO_WEATHER_DESCRIPTIONS.get(w_code, "Clear Sky")
 
-                    # Sample every 4 hours for concise forecast
-                    for i in range(0, min(len(times), 24), 4):
-                        iso_time = times[i]
-                        # Format readable timestamp e.g. "10 Oct 14:00"
-                        try:
-                            dt = datetime.datetime.fromisoformat(iso_time)
-                            formatted_time = dt.strftime("%d %b %H:%M")
-                        except Exception:
-                            formatted_time = iso_time
+                forecast_items: list[WeatherForecastItem] = []
+                times = hourly.get("time", [])
+                temps = hourly.get("temperature_2m", [])
+                rhs = hourly.get("relative_humidity_2m", [])
+                precips = hourly.get("precipitation_probability", [])
+                winds = hourly.get("wind_speed_10m", [])
+                codes = hourly.get("weather_code", [])
 
-                        forecast_items.append(
-                            WeatherForecastItem(
-                                timestamp=formatted_time,
-                                temperature_c=float(temps[i]) if i < len(temps) else curr_temp,
-                                humidity_percent=float(rhs[i]) if i < len(rhs) else curr_rh,
-                                rainfall_probability_percent=float(precips[i]) if i < len(precips) else 0.0,
-                                weather_condition=WMO_WEATHER_DESCRIPTIONS.get(
-                                    int(codes[i]) if i < len(codes) else 0, "Clear Sky"
-                                ),
-                                wind_speed_kmh=float(winds[i]) if i < len(winds) else 8.0,
-                            )
+                # Find the starting index matching current hour to avoid past timestamps
+                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                start_idx = 0
+                for idx, t_str in enumerate(times):
+                    try:
+                        t_dt = datetime.datetime.fromisoformat(t_str)
+                        if t_dt.tzinfo is None:
+                            t_dt = t_dt.replace(tzinfo=datetime.timezone.utc)
+                        if t_dt >= now_utc - datetime.timedelta(hours=1):
+                            start_idx = idx
+                            break
+                    except Exception:
+                        pass
+
+                # Sample every 3-4 hours for upcoming 24 hours from current time
+                end_idx = min(start_idx + 24, len(times))
+                for i in range(start_idx, end_idx, 4):
+                    iso_time = times[i]
+                    try:
+                        dt = datetime.datetime.fromisoformat(iso_time)
+                        formatted_time = dt.strftime("%d %b %H:%M")
+                    except Exception:
+                        formatted_time = iso_time
+
+                    forecast_items.append(
+                        WeatherForecastItem(
+                            timestamp=formatted_time,
+                            temperature_c=float(temps[i]) if i < len(temps) else curr_temp,
+                            humidity_percent=float(rhs[i]) if i < len(rhs) else curr_rh,
+                            rainfall_probability_percent=float(precips[i]) if i < len(precips) else 0.0,
+                            weather_condition=WMO_WEATHER_DESCRIPTIONS.get(
+                                int(codes[i]) if i < len(codes) else 0, "Clear Sky"
+                            ),
+                            wind_speed_kmh=float(winds[i]) if i < len(winds) else 8.0,
                         )
-
-                    # Assess grain storage environmental impact
-                    if curr_rh > 75.0:
-                        impact = (
-                            "High ambient humidity detected (>75%). Seal granary ventilators to prevent "
-                            "spontaneous damp air intake and mold proliferation."
-                        )
-                    elif curr_rh < 40.0:
-                        impact = (
-                            "Dry outdoor ambient conditions (<40% RH). Favorable window for active daytime "
-                            "granary aeration and solar drying of grain stocks."
-                        )
-                    elif curr_temp > 35.0:
-                        impact = (
-                            "Elevated outdoor temperatures (>35°C). Maximize rooftop shade insulation; ventilate "
-                            "only during cooler late night or early morning hours."
-                        )
-                    else:
-                        impact = (
-                            "Moderate ambient weather conditions. Standard storage ventilation guidelines apply. "
-                            "Ensure consistent airflow."
-                        )
-
-                    return WeatherReportOut(
-                        location=display_name,
-                        provider="Open-Meteo (Live API)",
-                        retrieval_timestamp=now_iso,
-                        freshness_status="live",
-                        current_temperature_c=curr_temp,
-                        current_humidity_percent=curr_rh,
-                        weather_condition=condition_text,
-                        forecast=forecast_items,
-                        storage_impact_summary=impact,
                     )
+
+                # Assess grain storage environmental impact
+                if curr_rh > 75.0:
+                    impact = (
+                        "High ambient humidity detected (>75%). Seal granary ventilators to prevent "
+                        "spontaneous damp air intake and mold proliferation."
+                    )
+                elif curr_rh < 40.0:
+                    impact = (
+                        "Dry outdoor ambient conditions (<40% RH). Favorable window for active daytime "
+                        "granary aeration and solar drying of grain stocks."
+                    )
+                elif curr_temp > 35.0:
+                    impact = (
+                        "Elevated outdoor temperatures (>35°C). Maximize rooftop shade insulation; ventilate "
+                        "only during cooler late night or early morning hours."
+                    )
+                else:
+                    impact = (
+                        "Moderate ambient weather conditions. Standard storage ventilation guidelines apply. "
+                        "Ensure consistent airflow."
+                    )
+
+                return WeatherReportOut(
+                    location=display_name,
+                    provider="Open-Meteo (Live API)",
+                    retrieval_timestamp=now_iso,
+                    freshness_status="live",
+                    current_temperature_c=curr_temp,
+                    current_humidity_percent=curr_rh,
+                    weather_condition=condition_text,
+                    forecast=forecast_items,
+                    storage_impact_summary=impact,
+                )
+        except ValueError:
+            raise
         except Exception as e:
-            logger.warning(f"Open-Meteo live request failed: {e}. Falling back to benchmark weather.")
-
-        # Fallback realistic forecast with clear disclosure
-        fallback_items = [
-            WeatherForecastItem(
-                timestamp="Today 12:00 PM",
-                temperature_c=28.5,
-                humidity_percent=58.0,
-                rainfall_probability_percent=10.0,
-                weather_condition="Clear Sky",
-                wind_speed_kmh=12.0,
-            ),
-            WeatherForecastItem(
-                timestamp="Today 06:00 PM",
-                temperature_c=25.0,
-                humidity_percent=65.0,
-                rainfall_probability_percent=15.0,
-                weather_condition="Partly Cloudy",
-                wind_speed_kmh=9.0,
-            ),
-            WeatherForecastItem(
-                timestamp="Tomorrow 06:00 AM",
-                temperature_c=20.0,
-                humidity_percent=72.0,
-                rainfall_probability_percent=5.0,
-                weather_condition="Clear Sky",
-                wind_speed_kmh=6.0,
-            ),
-            WeatherForecastItem(
-                timestamp="Tomorrow 12:00 PM",
-                temperature_c=29.0,
-                humidity_percent=54.0,
-                rainfall_probability_percent=10.0,
-                weather_condition="Sunny",
-                wind_speed_kmh=11.0,
-            ),
-        ]
-
-        return WeatherReportOut(
-            location=location,
-            provider="Open-Meteo (Offline Benchmark)",
-            retrieval_timestamp=now_iso,
-            freshness_status="fallback",
-            current_temperature_c=27.5,
-            current_humidity_percent=62.0,
-            weather_condition="Clear Sky",
-            forecast=fallback_items,
-            storage_impact_summary="Ambient conditions are moderate. Keep granary vents monitored during evening humidity shifts.",
-        )
+            logger.error(f"Open-Meteo live request failed: {e}")
+            raise RuntimeError(f"Open-Meteo live weather forecast service unavailable: {str(e)}")

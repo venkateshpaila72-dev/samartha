@@ -30,7 +30,7 @@ async def register(payload: UserRegister):
         "email": payload.email.strip().lower(),
         "password_hash": hash_password(payload.password),
         "full_name": payload.full_name,
-        "role": payload.role,
+        "role": "farmer",
         "preferred_language": payload.preferred_language,
         "phone_number": payload.phone_number,
         "village_or_location": payload.village_or_location,
@@ -39,7 +39,7 @@ async def register(payload: UserRegister):
 
     UserRepository.create(user_doc)
     user_out = UserOut(**user_doc)
-    token = create_access_token(data={"sub": user_id, "role": payload.role})
+    token = create_access_token(data={"sub": user_id, "role": "farmer"})
 
     return APIResponse(
         success=True,

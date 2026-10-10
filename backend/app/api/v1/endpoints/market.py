@@ -3,10 +3,9 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, get_owned_batch
 from app.integrations.market_client import MarketClient
 from app.repositories.crop_repository import CropRepository
-from app.repositories.storage_batch_repository import StorageBatchRepository
 from app.schemas.common import APIResponse
 from app.schemas.market import MarketPriceReportOut
 
@@ -31,9 +30,8 @@ async def get_batch_market_prices(
     batch_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    batch = StorageBatchRepository.get_by_id(batch_id)
-    if not batch:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Storage batch not found.")
+    # Enforce batch ownership check (fixes H4)
+    batch = get_owned_batch(batch_id, current_user)
 
     crop_doc = CropRepository.get_by_id(batch.get("crop_id", ""))
     crop_name = crop_doc.get("crop_name") if crop_doc else batch.get("custom_batch_name", "Wheat")

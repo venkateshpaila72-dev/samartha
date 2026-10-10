@@ -1,12 +1,15 @@
 """File & Image Upload Endpoint for FarmShield.
 Integrates Cloudinary for cloud asset storage with fallback to local upload storage.
+Enforces strict file type verification, size limits, and sanitization.
 """
 
+import io
 import os
 import uuid
 import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from PIL import Image
 
 from app.api.dependencies import get_current_user
 from app.core.config import settings
@@ -18,14 +21,26 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
 
-ALLOWED_IMAGE_TYPES = {
+ALLOWED_MIME_TYPES = {
     "image/jpeg",
     "image/png",
     "image/webp",
-    "image/gif",
-    "image/bmp",
-    "image/svg+xml",
 }
+
+ALLOWED_FORMATS = {
+    "jpeg": "jpg",
+    "jpg": "jpg",
+    "png": "png",
+    "webp": "webp",
+}
+
+ALLOWED_FOLDERS = {
+    "farmshield/crops",
+    "farmshield/diary",
+    "farmshield/general",
+}
+
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
 @router.post("", response_model=APIResponse[ImageUploadOut])
@@ -36,11 +51,12 @@ async def upload_image(
 ):
     """Uploads an image file to Cloudinary.
     Falls back to local directory if Cloudinary is not configured.
+    Enforces strict magic byte/Pillow verification, 5MB max size, and safe server-side filenames.
     """
-    if not file.content_type or file.content_type.lower() not in ALLOWED_IMAGE_TYPES:
+    if not file.content_type or file.content_type.lower() not in ALLOWED_MIME_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type: {file.content_type}. Only standard images are supported.",
+            detail=f"Invalid file type: {file.content_type}. Only JPEG, PNG, and WebP images are supported.",
         )
 
     file_bytes = await file.read()
@@ -50,13 +66,39 @@ async def upload_image(
             detail="Uploaded file is empty.",
         )
 
+    if len(file_bytes) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"File exceeds maximum allowed size of {MAX_FILE_SIZE // (1024 * 1024)} MB.",
+        )
+
+    # Validate image bytes and determine true image format
+    try:
+        with Image.open(io.BytesIO(file_bytes)) as img:
+            img.verify()
+            raw_format = (img.format or "").lower()
+            if raw_format not in ALLOWED_FORMATS:
+                raise ValueError(f"Unsupported format: {raw_format}")
+            extension = ALLOWED_FORMATS[raw_format]
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid, spoofed, or corrupted image content. Only valid JPEG, PNG, and WebP files are accepted.",
+        )
+
+    # Restrict folder to allow-list
+    target_folder = folder if folder in ALLOWED_FOLDERS else "farmshield/crops"
+
+    # Server-generated safe filename
+    safe_filename = f"{uuid.uuid4().hex}.{extension}"
+
     # 1. Try Cloudinary if configured
     if CloudinaryClient.is_configured():
         try:
             result = CloudinaryClient.upload_image(
                 file_bytes=file_bytes,
-                filename=file.filename,
-                folder=folder or "farmshield/crops",
+                filename=safe_filename,
+                folder=target_folder,
             )
             return APIResponse(
                 success=True,
@@ -65,8 +107,8 @@ async def upload_image(
                     url=result["url"],
                     secure_url=result["secure_url"],
                     public_id=result.get("public_id"),
-                    format=result.get("format"),
-                    bytes=result.get("bytes"),
+                    format=result.get("format", extension),
+                    bytes=result.get("bytes", len(file_bytes)),
                     provider="cloudinary",
                     message="Image hosted securely on Cloudinary.",
                 ),
@@ -81,21 +123,21 @@ async def upload_image(
     # 2. Local fallback if Cloudinary credentials are not present
     upload_dir = settings.STORAGE_UPLOAD_DIR
     os.makedirs(upload_dir, exist_ok=True)
-    extension = file.filename.split(".")[-1] if file.filename and "." in file.filename else "jpg"
-    filename = f"{uuid.uuid4().hex[:12]}.{extension}"
-    target_path = os.path.join(upload_dir, filename)
+    target_path = os.path.join(upload_dir, safe_filename)
 
     with open(target_path, "wb") as f:
         f.write(file_bytes)
 
-    local_url = f"/static/uploads/{filename}"
+    base_url = settings.PUBLIC_BASE_URL.rstrip("/")
+    absolute_url = f"{base_url}/static/uploads/{safe_filename}"
+
     return APIResponse(
         success=True,
         message="Image saved locally (Cloudinary credentials not configured).",
         data=ImageUploadOut(
-            url=local_url,
-            secure_url=local_url,
-            public_id=filename,
+            url=absolute_url,
+            secure_url=absolute_url,
+            public_id=safe_filename,
             format=extension,
             bytes=len(file_bytes),
             provider="local_fallback",

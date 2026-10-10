@@ -69,6 +69,7 @@ async def create_storage_batch(
     doc = {
         "batch_id": batch_id,
         "farmer_id": current_user["id"],
+        "user_id": current_user["id"],
         "crop_id": payload.crop_id,
         "custom_batch_name": payload.custom_batch_name,
         "quantity_kg": payload.quantity_kg,

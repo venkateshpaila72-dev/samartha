@@ -44,6 +44,15 @@ class ChatbotService:
 
     @classmethod
     def create_conversation(cls, user_id: str, payload: ConversationCreate) -> ConversationOut:
+        if payload.batch_id:
+            from app.repositories.storage_batch_repository import StorageBatchRepository
+            b = StorageBatchRepository.get_by_id(payload.batch_id)
+            if not b:
+                raise ValueError(f"Storage batch '{payload.batch_id}' not found.")
+            owner_id = b.get("user_id") or b.get("farmer_id")
+            if owner_id != user_id:
+                raise ValueError(f"Forbidden: You do not own storage batch '{payload.batch_id}'.")
+
         convo_id = f"conv_{uuid.uuid4().hex[:10]}"
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         doc = {
@@ -105,6 +114,7 @@ class ChatbotService:
         user_id: str,
         convo_id: str,
         payload: ChatMessageCreate,
+        current_user: Optional[dict] = None,
     ) -> ChatMessageOut:
         convo = cls.get_conversation(convo_id, user_id)
         if not convo:
@@ -112,6 +122,16 @@ class ChatbotService:
 
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         batch_id = payload.batch_id or convo.batch_id
+
+        if batch_id:
+            from app.repositories.storage_batch_repository import StorageBatchRepository
+            b = StorageBatchRepository.get_by_id(batch_id)
+            if not b:
+                raise ValueError(f"Storage batch '{batch_id}' not found.")
+            is_admin = current_user and current_user.get("role") == "admin"
+            owner_id = b.get("user_id") or b.get("farmer_id")
+            if owner_id != user_id and not is_admin:
+                raise ValueError(f"Forbidden: You do not own storage batch '{batch_id}'.")
 
         # 1. Build context
         context_data = AIContextBuilder.build_context(

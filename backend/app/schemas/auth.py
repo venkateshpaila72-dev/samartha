@@ -10,7 +10,6 @@ class UserRegister(BaseModel):
     email: str = Field(pattern=EMAIL_PATTERN, description="Valid email address")
     password: str = Field(min_length=6, description="Password with minimum 6 characters")
     full_name: str = Field(min_length=2)
-    role: str = Field(default="farmer", pattern="^(farmer|admin|expert)$")
     preferred_language: str = Field(default="en")
     phone_number: Optional[str] = None
     village_or_location: Optional[str] = None

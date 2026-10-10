@@ -46,3 +46,21 @@ async def get_current_admin(current_user: dict = Depends(get_current_user)) -> d
             detail="Administrative privilege required for this action",
         )
     return current_user
+
+
+def get_owned_batch(batch_id: str, current_user: dict) -> dict:
+    from app.repositories.storage_batch_repository import StorageBatchRepository
+
+    batch = StorageBatchRepository.get_by_id(batch_id)
+    if not batch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Storage batch '{batch_id}' not found.",
+        )
+    owner_id = batch.get("user_id") or batch.get("farmer_id")
+    if owner_id != current_user.get("id") and current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not have permission to access this storage batch.",
+        )
+    return batch

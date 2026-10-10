@@ -3,7 +3,7 @@ Loads environment variables safely using Pydantic Settings.
 """
 
 from typing import List, Union
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     APP_PORT: int = 8000
     LOG_LEVEL: str = "INFO"
     FRONTEND_ORIGIN: str = "http://localhost:5173"
+    PUBLIC_BASE_URL: str = "http://localhost:8000"
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:5173",
         "http://localhost:3000",
@@ -86,6 +87,21 @@ class Settings(BaseSettings):
                     pass
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
+
+    @model_validator(mode="after")
+    def validate_jwt_secret(self):
+        insecure_keys = {
+            "farmshield_super_secure_secret_key_change_in_production_32chars",
+            "farmshield-secret-key-production-change-this-in-env-file",
+            "secret",
+            "changeme",
+        }
+        if self.APP_ENV not in ("development", "test"):
+            if not self.JWT_SECRET_KEY or len(self.JWT_SECRET_KEY) < 32 or self.JWT_SECRET_KEY in insecure_keys:
+                raise ValueError(
+                    "JWT_SECRET_KEY must be configured with a secure key of at least 32 characters in non-development environments."
+                )
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env",

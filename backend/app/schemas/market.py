@@ -1,6 +1,6 @@
 """Market Price Schemas."""
 
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -19,9 +19,9 @@ class MarketPriceItem(BaseModel):
 
 class MarketPriceReportOut(BaseModel):
     crop_name: str
-    latest_prices: list[MarketPriceItem] = Field(default_factory=list)
-    average_modal_price: float
-    price_trend: str  # rising, stable, declining
+    latest_prices: List[MarketPriceItem] = Field(default_factory=list)
+    average_modal_price: Optional[float] = None
+    price_trend: str = "unknown"  # rising, stable, declining, unknown
     recommendation: str
     retrieval_timestamp: str
-    freshness: str  # live, cached, fallback
+    freshness: str  # live, cached, reference_sample, unavailable

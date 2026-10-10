@@ -3,7 +3,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, get_owned_batch
 from app.schemas.chatbot import (
     ChatMessageCreate,
     ChatMessageOut,
@@ -21,6 +21,8 @@ async def create_conversation(
     payload: ConversationCreate,
     current_user: dict = Depends(get_current_user),
 ):
+    if payload.batch_id:
+        get_owned_batch(payload.batch_id, current_user)
     convo = ChatbotService.create_conversation(current_user["id"], payload)
     return APIResponse(
         success=True,
@@ -79,11 +81,14 @@ async def post_message(
     payload: ChatMessageCreate,
     current_user: dict = Depends(get_current_user),
 ):
+    if payload.batch_id:
+        get_owned_batch(payload.batch_id, current_user)
     try:
         reply = await ChatbotService.post_message(
             user_id=current_user["id"],
             convo_id=conversation_id,
             payload=payload,
+            current_user=current_user,
         )
         return APIResponse(
             success=True,

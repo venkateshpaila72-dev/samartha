@@ -24,12 +24,24 @@ logger = logging.getLogger("farmshield")
 async def lifespan(app: FastAPI):
     # Startup sequence
     logger.info("Initializing FarmShield API backend...")
-    db = MongoDBManager.connect()
-    if db is not None:
-        try:
-            create_all_indexes(db)
-        except Exception as e:
-            logger.warning(f"Notice on index creation: {e}")
+    if settings.APP_ENV != "test":
+        db = MongoDBManager.connect()
+        if db is not None:
+            try:
+                create_all_indexes(db)
+            except Exception as e:
+                logger.warning(f"Notice on index creation: {e}")
+        else:
+            if settings.APP_ENV == "production":
+                raise RuntimeError(
+                    f"Could not connect to MongoDB database at '{settings.MONGODB_URI}'. "
+                    "A reachable MongoDB instance is required to start FarmShield in production."
+                )
+            else:
+                logger.error(
+                    f"Could not connect to MongoDB database at '{settings.MONGODB_URI}'. "
+                    "API running in degraded state; database-dependent endpoints will return 503."
+                )
 
     # Ensure crop database has seeded records
     seeded_count = CropRepository.count()
@@ -61,6 +73,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
+
 
 # Mount API Routers
 app.include_router(api_router)

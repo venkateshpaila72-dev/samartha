@@ -99,8 +99,9 @@ class MonitoringService:
 
         active_triggered_types = {v.condition_type for v in violations}
 
-        # Check existing active alerts for this batch
-        existing_active = AlertRepository.list_by_batch(payload.batch_id, status="active")
+        # Check existing open (active + acknowledged) alerts for this batch
+        all_batch_alerts = AlertRepository.list_by_batch(payload.batch_id)
+        existing_open = [a for a in all_batch_alerts if a.get("status") in ("active", "acknowledged")]
 
         # Create new alerts for freshly triggered conditions (Debounce)
         for v in violations:
@@ -125,14 +126,71 @@ class MonitoringService:
                 }
                 AlertRepository.create(alert_doc)
 
+                # Auto-dispatch WhatsApp for new critical alerts
+                if v.severity == "critical":
+                    cls._maybe_auto_dispatch_whatsapp(batch, alert_doc)
+
         # Auto-resolve conditions that have recovered back to safe range
-        for ea in existing_active:
+        for ea in existing_open:
             cond_type = ea["condition_type"]
             if cond_type not in active_triggered_types:
                 # Measurement returned to normal! Auto-resolve
                 AlertRepository.update_status(ea["alert_id"], status="resolved", resolved_at=now_iso)
 
         return SensorReadingOut(**reading_doc)
+
+    @classmethod
+    def _maybe_auto_dispatch_whatsapp(cls, batch: dict, alert_doc: dict):
+        import time
+        import re
+        import asyncio
+        from app.repositories.user_repository import UserRepository
+        from app.integrations.whatsapp_client import WhatsAppClient
+
+        batch_id = batch.get("batch_id")
+        now = time.time()
+        last_time = getattr(cls, "_batch_whatsapp_cooldown", {}).get(batch_id, 0.0)
+        if now - last_time < 900:  # 15 minutes cooldown
+            return
+
+        owner_id = batch.get("user_id") or batch.get("farmer_id")
+        if not owner_id:
+            return
+        owner = UserRepository.get_by_id(owner_id)
+        if not owner:
+            return
+        prefs = owner.get("notification_preferences", {})
+        if not prefs.get("enable_whatsapp_alerts", True):
+            return
+        target_phone = prefs.get("whatsapp_phone_number") or owner.get("phone_number")
+        if not target_phone or not re.match(r"^\+[1-9]\d{7,14}$", target_phone):
+            return
+
+        if not hasattr(cls, "_batch_whatsapp_cooldown"):
+            cls._batch_whatsapp_cooldown = {}
+        cls._batch_whatsapp_cooldown[batch_id] = now
+
+        async def _send():
+            try:
+                success = await WhatsAppClient.send_alert_notification(
+                    phone_number=target_phone,
+                    crop_name=alert_doc.get("crop_name", "Crop"),
+                    condition_type=alert_doc.get("condition_type", "critical"),
+                    measured_value=alert_doc.get("measured_value", 0.0),
+                    unit=alert_doc.get("unit", ""),
+                    recommended_action=alert_doc.get("recommended_action", ""),
+                    batch_id=batch_id,
+                )
+                if success:
+                    AlertRepository.update(alert_doc["alert_id"], {"whatsapp_notified": True})
+            except Exception:
+                pass
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(_send())
+        except RuntimeError:
+            pass
 
     @classmethod
     def get_monitoring_summary(cls, batch_id: str) -> MonitoringSummaryOut:
