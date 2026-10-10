@@ -46,22 +46,42 @@ async def get_batch_weather(
     # Enforce batch ownership (fixes H4)
     batch = get_owned_batch(batch_id, current_user)
 
-    loc = batch.get("storage_location") or current_user.get("village_or_location") or "New Delhi, IN"
-    try:
-        weather = await WeatherClient.get_weather(location=loc)
-    except ValueError as e:
+    # Attempt resolution with batch storage_location, fallback to user's village, then regional default
+    candidates = [
+        batch.get("storage_location"),
+        current_user.get("village_or_location"),
+        "New Delhi, IN",
+    ]
+
+    weather = None
+    resolved_loc = None
+    last_err = None
+
+    for candidate in candidates:
+        if not candidate or not str(candidate).strip():
+            continue
+        c_str = str(candidate).strip()
+        try:
+            weather = await WeatherClient.get_weather(location=c_str)
+            resolved_loc = c_str
+            break
+        except ValueError as e:
+            last_err = e
+            continue
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Weather service temporarily unavailable: {str(e)}",
+            )
+
+    if not weather:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Storage location '{loc}' could not be resolved: {str(e)}",
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Weather service temporarily unavailable: {str(e)}",
+            detail=f"Could not resolve storage batch location: {last_err}",
         )
 
     return APIResponse(
         success=True,
-        message=f"Weather forecast for storage batch location '{loc}' retrieved.",
+        message=f"Weather forecast for storage batch location '{resolved_loc}' retrieved.",
         data=weather,
     )

@@ -1,172 +1,308 @@
-"""Agricultural Market Price Client for FarmShield using AGMARKNET.
-Integrates commodity pricing from APMC mandis across India with strict data integrity:
-- Never substitutes an unknown crop with Wheat.
-- Returns explicit 'unavailable' state when price records do not exist.
-- Clearly marks reference samples without stamping misleading live arrival dates.
-"""
+
+"""AGMARKNET 2.0 client for FarmShield market prices."""
 
 import datetime
+import json
 import logging
-from typing import Optional, List, Dict, Any
+import os
+from typing import Any, Dict, List, Optional
+
 import httpx
 
 from app.core.config import settings
-from app.db.collection_names import MARKET_PRICES_COLLECTION
-from app.db.mongo import get_db
 from app.schemas.market import MarketPriceItem, MarketPriceReportOut
 
 logger = logging.getLogger(__name__)
 
-# Reference AGMARKNET APMC benchmark price dataset for verified storage crops
-AGMARKNET_BENCHMARKS: Dict[str, List[Dict[str, Any]]] = {
-    "Paddy (Rice)": [
-        {"market": "Karnal APMC", "district": "Karnal", "state": "Haryana", "modal": 2350.0, "min": 2180.0, "max": 2450.0, "variety": "Common"},
-        {"market": "Gondia APMC", "district": "Gondia", "state": "Maharashtra", "modal": 2220.0, "min": 2050.0, "max": 2300.0, "variety": "Fine"},
-        {"market": "Burdwan APMC", "district": "Purba Bardhaman", "state": "West Bengal", "modal": 2280.0, "min": 2100.0, "max": 2360.0, "variety": "Ratna"},
-    ],
-    "Wheat": [
-        {"market": "Khanna APMC", "district": "Ludhiana", "state": "Punjab", "modal": 2425.0, "min": 2320.0, "max": 2510.0, "variety": "Dara"},
-        {"market": "Indore APMC", "district": "Indore", "state": "Madhya Pradesh", "modal": 2550.0, "min": 2400.0, "max": 2680.0, "variety": "Sharbati"},
-        {"market": "Hapur APMC", "district": "Hapur", "state": "Uttar Pradesh", "modal": 2390.0, "min": 2280.0, "max": 2460.0, "variety": "Deshi"},
-    ],
-    "Maize (Corn)": [
-        {"market": "Gulabbagh APMC", "district": "Purnea", "state": "Bihar", "modal": 2150.0, "min": 1980.0, "max": 2240.0, "variety": "Yellow"},
-        {"market": "Davangere APMC", "district": "Davangere", "state": "Karnataka", "modal": 2200.0, "min": 2050.0, "max": 2290.0, "variety": "Local"},
-        {"market": "Chhindwara APMC", "district": "Chhindwara", "state": "Madhya Pradesh", "modal": 2110.0, "min": 1950.0, "max": 2180.0, "variety": "Hybrid"},
-    ],
-    "Onion": [
-        {"market": "Lasalgaon APMC", "district": "Nashik", "state": "Maharashtra", "modal": 2800.0, "min": 1600.0, "max": 3400.0, "variety": "Red"},
-        {"market": "Pimpalgaon APMC", "district": "Nashik", "state": "Maharashtra", "modal": 2750.0, "min": 1550.0, "max": 3300.0, "variety": "Pol"},
-        {"market": "Hubli APMC", "district": "Dharwad", "state": "Karnataka", "modal": 2650.0, "min": 1800.0, "max": 3100.0, "variety": "Bangalore Rose"},
-    ],
-    "Potato": [
-        {"market": "Agra APMC", "district": "Agra", "state": "Uttar Pradesh", "modal": 1450.0, "min": 1200.0, "max": 1650.0, "variety": "Kufri Bahar"},
-        {"market": "Jalandhar APMC", "district": "Jalandhar", "state": "Punjab", "modal": 1380.0, "min": 1150.0, "max": 1520.0, "variety": "Jyoti"},
-        {"market": "Deesa APMC", "district": "Banaskantha", "state": "Gujarat", "modal": 1520.0, "min": 1280.0, "max": 1700.0, "variety": "Badshah"},
-    ],
-    "Chickpea (Gram / Chana)": [
-        {"market": "Bikaner APMC", "district": "Bikaner", "state": "Rajasthan", "modal": 5850.0, "min": 5600.0, "max": 6100.0, "variety": "Desi"},
-        {"market": "Latur APMC", "district": "Latur", "state": "Maharashtra", "modal": 5900.0, "min": 5650.0, "max": 6150.0, "variety": "Annagiri"},
-        {"market": "Akola APMC", "district": "Akola", "state": "Maharashtra", "modal": 5820.0, "min": 5580.0, "max": 6050.0, "variety": "Chana"},
-    ],
-    "Soybean": [
-        {"market": "Indore APMC", "district": "Indore", "state": "Madhya Pradesh", "modal": 4750.0, "min": 4500.0, "max": 4900.0, "variety": "Yellow"},
-        {"market": "Ujjain APMC", "district": "Ujjain", "state": "Madhya Pradesh", "modal": 4700.0, "min": 4450.0, "max": 4860.0, "variety": "Local"},
-        {"market": "Nagpur APMC", "district": "Nagpur", "state": "Maharashtra", "modal": 4680.0, "min": 4420.0, "max": 4820.0, "variety": "Yellow"},
-    ],
-    "Mustard": [
-        {"market": "Bharatpur APMC", "district": "Bharatpur", "state": "Rajasthan", "modal": 5450.0, "min": 5200.0, "max": 5650.0, "variety": "Black"},
-        {"market": "Alwar APMC", "district": "Alwar", "state": "Rajasthan", "modal": 5400.0, "min": 5150.0, "max": 5600.0, "variety": "Mustard"},
-    ],
-}
+DEFAULT_BASE_URL = "https://api.agmarknet.gov.in/v1"
+PRICE_ENDPOINT = "/prices-and-arrivals/date-wise/specific-commodity"
+
+
+def _load_json_env(name: str) -> Dict[str, Any]:
+    """Load an optional JSON object from an environment variable."""
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+        return value if isinstance(value, dict) else {}
+    except json.JSONDecodeError:
+        logger.warning("Invalid JSON in environment variable %s", name)
+        return {}
+
+
+def _normalise_name(value: Optional[str]) -> str:
+    return " ".join((value or "").strip().lower().replace("_", " ").split())
+
+
+def _first(record: dict, *keys: str, default=None):
+    """Return the first non-empty field from a record."""
+    for key in keys:
+        value = record.get(key)
+        if value not in (None, ""):
+            return value
+    return default
+
+
+def _number(value: Any) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        return float(str(value).replace(",", "").replace("₹", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_records(payload: Any) -> List[dict]:
+    """Handle common list and nested-object response formats."""
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+
+    if not isinstance(payload, dict):
+        return []
+
+    for key in ("data", "records", "results", "items", "content"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [item for item in value if isinstance(item, dict)]
+        if isinstance(value, dict):
+            nested = _extract_records(value)
+            if nested:
+                return nested
+
+    # Some APIs return one record directly.
+    if any(
+        key in payload
+        for key in ("modal_price", "modalPrice", "commodity", "commodityName")
+    ):
+        return [payload]
+
+    return []
 
 
 class MarketClient:
-    """AGMARKNET Agricultural Market Client."""
+    """Fetches daily mandi prices from AGMARKNET 2.0."""
 
     @classmethod
-    async def get_market_prices(cls, crop_name: str) -> MarketPriceReportOut:
+    async def get_market_prices(
+        cls,
+        crop_name: str,
+        state: Optional[str] = None,
+        district: Optional[str] = None,
+    ) -> MarketPriceReportOut:
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        clean_crop = crop_name.strip()
+        crop = (crop_name or "").strip()
 
-        # Find matching crop key in benchmarks if any
-        matched_crop = None
-        for key in AGMARKNET_BENCHMARKS.keys():
-            if key.lower() in clean_crop.lower() or clean_crop.lower() in key.lower():
-                matched_crop = key
-                break
+        if not crop:
+            return cls._unavailable("", now_iso, "Please provide a crop name.")
 
-        # 1. Try querying data.gov.in / AGMARKNET API if configured
-        api_key = settings.MARKET_API_KEY.strip()
-        base_url = settings.MARKET_API_BASE_URL.strip() or "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
-        parsed_items: List[MarketPriceItem] = []
-        is_live = False
+        base_url = (
+            os.getenv("AGMARKNET_BASE_URL", "").strip()
+            or getattr(settings, "AGMARKNET_BASE_URL", "").strip()
+            or DEFAULT_BASE_URL
+        ).rstrip("/")
 
-        if api_key and not api_key.startswith("your_"):
+        # The documented endpoint accepts IDs, not arbitrary crop/state names.
+        # Configure these mappings using the IDs provided by AGMARKNET.
+        commodity_ids = _load_json_env("AGMARKNET_COMMODITY_IDS")
+        state_ids = _load_json_env("AGMARKNET_STATE_IDS")
+        district_ids = _load_json_env("AGMARKNET_DISTRICT_IDS")
+
+        commodity_id = commodity_ids.get(crop)
+        if commodity_id is None:
+            commodity_id = commodity_ids.get(_normalise_name(crop))
+
+        state_id = None
+        if state:
+            state_id = state_ids.get(state) or state_ids.get(_normalise_name(state))
+
+        district_id = None
+        if district:
+            district_id = (
+                district_ids.get(f"{state or ''}|{district}")
+                or district_ids.get(_normalise_name(district))
+            )
+
+        if commodity_id is None:
+            return cls._unavailable(
+                crop,
+                now_iso,
+                (
+                    f"AGMARKNET commodity ID is not configured for '{crop}'. "
+                    "Add it to AGMARKNET_COMMODITY_IDS using the official commodity ID."
+                ),
+            )
+
+        if state and state_id is None:
+            return cls._unavailable(
+                crop,
+                now_iso,
+                (
+                    f"AGMARKNET state ID is not configured for '{state}'. "
+                    "Add it to AGMARKNET_STATE_IDS using the official state ID."
+                ),
+            )
+
+        # This endpoint requires a year/month and the relevant IDs.
+        today = datetime.date.today()
+        params: Dict[str, Any] = {
+            "year": today.year,
+            "month": today.month,
+            "commodityId": commodity_id,
+        }
+        if state_id is not None:
+            params["stateId"] = state_id
+        if district_id is not None:
+            params["districtId"] = district_id
+
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "FarmShield/1.0",
+        }
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(20.0, connect=8.0),
+                follow_redirects=True,
+                headers=headers,
+            ) as client:
+                response = await client.get(
+                    f"{base_url}{PRICE_ENDPOINT}",
+                    params=params,
+                )
+
+            if response.status_code != 200:
+                logger.warning(
+                    "AGMARKNET returned HTTP %s: %s",
+                    response.status_code,
+                    response.text[:500],
+                )
+                return cls._unavailable(
+                    crop,
+                    now_iso,
+                    f"AGMARKNET could not provide prices (HTTP {response.status_code}).",
+                )
+
             try:
-                params = {
-                    "api-key": api_key,
-                    "format": "json",
-                    "filters[commodity]": matched_crop or clean_crop,
-                    "limit": 10,
-                }
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    resp = await client.get(base_url, params=params)
-                    if resp.status_code == 200:
-                        records = resp.json().get("records", [])
-                        for r in records:
-                            parsed_items.append(
-                                MarketPriceItem(
-                                    crop_name=clean_crop,
-                                    variety=r.get("variety", "Standard"),
-                                    market_name=r.get("market", "APMC Mandi"),
-                                    district=r.get("district", "N/A"),
-                                    state=r.get("state", "India"),
-                                    modal_price_per_quintal=float(r.get("modal_price", 0.0)),
-                                    min_price_per_quintal=float(r.get("min_price", 0.0)),
-                                    max_price_per_quintal=float(r.get("max_price", 0.0)),
-                                    price_date=r.get("arrival_date", "Live"),
-                                    source="data.gov.in / AGMARKNET API",
-                                )
-                            )
-                        if parsed_items:
-                            is_live = True
-            except Exception as e:
-                logger.debug(f"data.gov.in AGMARKNET query error: {e}")
+                payload = response.json()
+            except ValueError:
+                logger.warning("AGMARKNET returned non-JSON data")
+                return cls._unavailable(
+                    crop, now_iso, "AGMARKNET returned an invalid response."
+                )
 
-        # 2. If live query succeeded, build live report
-        if is_live and parsed_items:
-            total_modal = sum(item.modal_price_per_quintal for item in parsed_items)
-            avg_modal = round(total_modal / len(parsed_items), 2)
-            report = MarketPriceReportOut(
-                crop_name=clean_crop,
-                latest_prices=parsed_items,
-                average_modal_price=avg_modal,
-                price_trend="stable",
-                recommendation=f"Live APMC modal rates for {clean_crop} average ₹{avg_modal:,.0f}/quintal.",
+            records = _extract_records(payload)
+            items: List[MarketPriceItem] = []
+
+            for record in records:
+                modal = _number(
+                    _first(record, "modal_price", "modalPrice", "modal", "modal_price_rs")
+                )
+                minimum = _number(
+                    _first(record, "min_price", "minPrice", "minimum_price", "min")
+                )
+                maximum = _number(
+                    _first(record, "max_price", "maxPrice", "maximum_price", "max")
+                )
+
+                # A record without a modal price is not useful as a price listing.
+                if modal is None or modal <= 0:
+                    continue
+
+                record_crop = str(
+                    _first(record, "commodity", "commodityName", "crop", default=crop)
+                )
+                market_name = str(
+                    _first(record, "market", "marketName", "apmc", default="Mandi")
+                )
+                record_state = str(
+                    _first(record, "state", "stateName", default=state or "India")
+                )
+                record_district = str(
+                    _first(record, "district", "districtName", default=district or "N/A")
+                )
+
+                items.append(
+                    MarketPriceItem(
+                        crop_name=record_crop,
+                        variety=str(
+                            _first(record, "variety", "varietyName", default="Standard")
+                        ),
+                        market_name=market_name,
+                        district=record_district,
+                        state=record_state,
+                        modal_price_per_quintal=modal,
+                        min_price_per_quintal=minimum if minimum is not None else modal,
+                        max_price_per_quintal=maximum if maximum is not None else modal,
+                        price_date=str(
+                            _first(
+                                record,
+                                "arrival_date",
+                                "arrivalDate",
+                                "date",
+                                "price_date",
+                                default="Date not supplied",
+                            )
+                        ),
+                        source="AGMARKNET 2.0",
+                    )
+                )
+
+            if not items:
+                return cls._unavailable(
+                    crop,
+                    now_iso,
+                    (
+                        f"No matching AGMARKNET price records were returned for {crop}"
+                        + (f" in {district}, {state}" if district and state
+                           else f" in {state}" if state else "")
+                        + ". Try another date or nearby mandi."
+                    ),
+                )
+
+            average = round(
+                sum(item.modal_price_per_quintal for item in items) / len(items), 2
+            )
+
+            return MarketPriceReportOut(
+                crop_name=crop,
+                latest_prices=items,
+                average_modal_price=average,
+                price_trend="unknown",
+                recommendation=(
+                    f"AGMARKNET returned {len(items)} daily price record(s) for {crop}. "
+                    "Compare the modal price, date, and nearby markets before selling."
+                ),
                 retrieval_timestamp=now_iso,
                 freshness="live",
             )
-            return report
 
-        # 3. Check if we have verified static benchmark for this specific crop
-        if matched_crop and matched_crop in AGMARKNET_BENCHMARKS:
-            benchmarks = AGMARKNET_BENCHMARKS[matched_crop]
-            items = []
-            for b in benchmarks:
-                items.append(
-                    MarketPriceItem(
-                        crop_name=matched_crop,
-                        variety=b.get("variety", "Common"),
-                        market_name=b["market"],
-                        district=b["district"],
-                        state=b["state"],
-                        modal_price_per_quintal=b["modal"],
-                        min_price_per_quintal=b["min"],
-                        max_price_per_quintal=b["max"],
-                        price_date="Reference Benchmark",
-                        source="AGMARKNET / Directorate of Marketing & Inspection",
-                    )
-                )
-            total_modal = sum(item.modal_price_per_quintal for item in items)
-            avg_modal = round(total_modal / len(items), 2)
-            return MarketPriceReportOut(
-                crop_name=clean_crop,
-                latest_prices=items,
-                average_modal_price=avg_modal,
-                price_trend="stable",
-                recommendation="Static reference sample for agricultural planning. Consult local APMC mandis for live day-of trading rates.",
-                retrieval_timestamp=now_iso,
-                freshness="reference_sample",
+        except httpx.TimeoutException:
+            logger.warning("AGMARKNET request timed out")
+            return cls._unavailable(
+                crop, now_iso, "AGMARKNET request timed out. Please try again."
+            )
+        except httpx.HTTPError:
+            logger.exception("AGMARKNET HTTP request failed")
+            return cls._unavailable(
+                crop, now_iso, "Could not connect to AGMARKNET. Please try again later."
+            )
+        except Exception:
+            logger.exception("Unexpected error while processing AGMARKNET response")
+            return cls._unavailable(
+                crop, now_iso, "An unexpected error occurred while retrieving prices."
             )
 
-        # 4. No data for this crop — DO NOT substitute Wheat or another crop!
+    @staticmethod
+    def _unavailable(
+        crop_name: str, timestamp: str, message: str
+    ) -> MarketPriceReportOut:
         return MarketPriceReportOut(
-            crop_name=clean_crop,
+            crop_name=crop_name,
             latest_prices=[],
             average_modal_price=None,
             price_trend="unknown",
-            recommendation=f"Mandi price data is currently unavailable for '{clean_crop}'. Please check your regional APMC mandi board.",
-            retrieval_timestamp=now_iso,
+            recommendation=message,
+            retrieval_timestamp=timestamp,
             freshness="unavailable",
         )

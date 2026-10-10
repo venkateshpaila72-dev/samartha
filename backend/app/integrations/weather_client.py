@@ -83,6 +83,12 @@ class WeatherClient:
             lat, lon = KNOWN_LOCATIONS[cleaned]
             return lat, lon, location_str
 
+        # Match known city or district names embedded in facility/warehouse names (e.g. "Nashik Granary")
+        import re
+        for city_key, (c_lat, c_lon) in KNOWN_LOCATIONS.items():
+            if re.search(rf"\b{re.escape(city_key)}\b", cleaned):
+                return c_lat, c_lon, f"{city_key.title()}, IN"
+
         # Attempt Open-Meteo geocoding if not in local lookup
         try:
             geo_url = "https://geocoding-api.open-meteo.com/v1/search"

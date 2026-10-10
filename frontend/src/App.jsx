@@ -15,6 +15,7 @@ import WeatherPage from './pages/farmer/WeatherPage';
 import MarketPricesPage from './pages/farmer/MarketPricesPage';
 import TraditionalGuidancePage from './pages/farmer/TraditionalGuidancePage';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import FarmerProfilePage from './pages/farmer/FarmerProfilePage';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -25,37 +26,57 @@ export default function App() {
 
   const fetchBatches = async () => {
     if (!user) return;
+
     setBatchesLoading(true);
+
     try {
       const data = await storageBatchService.getBatches();
+
       setBatches(data || []);
+
       if (data && data.length > 0) {
-        // Keep active batch if still present, or default to first
-        setActiveBatch(prev => {
-          if (prev && data.some(b => b.batch_id === prev.batch_id)) {
-            return data.find(b => b.batch_id === prev.batch_id);
+        setActiveBatch((previousBatch) => {
+          if (
+            previousBatch &&
+            data.some((batch) => batch.batch_id === previousBatch.batch_id)
+          ) {
+            return data.find(
+              (batch) => batch.batch_id === previousBatch.batch_id
+            );
           }
+
           return data[0];
         });
       } else {
         setActiveBatch(null);
       }
-    } catch (err) {
-      console.error('Error fetching storage batches:', err);
+    } catch (error) {
+      console.error('Error fetching storage batches:', error);
     } finally {
       setBatchesLoading(false);
     }
   };
 
   useEffect(() => {
-    if (user) {
+    if (user && user.role !== 'admin') {
       fetchBatches();
     }
   }, [user]);
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#090d16', color: '#10b981', fontSize: '1.2rem', fontWeight: '700' }}>
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: '#090d16',
+          color: '#10b981',
+          fontSize: '1.2rem',
+          fontWeight: '700',
+        }}
+      >
         Loading FarmShield...
       </div>
     );
@@ -65,21 +86,43 @@ export default function App() {
     return <AuthPages />;
   }
 
+  if (user.role === 'admin') {
+    return (
+      <div className="app-container">
+        <Sidebar
+          currentTab="admin"
+          onSelectTab={() => setCurrentTab('admin')}
+        />
+
+        <div className="main-content">
+          <Navbar
+            activeBatch={null}
+            batches={[]}
+            onSelectBatch={() => {}}
+            activeAlertsCount={0}
+          />
+
+          <main className="page-wrapper">
+            <AdminDashboard />
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   const handleBatchCreated = (newBatch) => {
-    setBatches(prev => [newBatch, ...prev]);
+    setBatches((previousBatches) => [newBatch, ...previousBatches]);
     setActiveBatch(newBatch);
     setCurrentTab('dashboard');
   };
 
   return (
     <div className="app-container">
-      {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
       />
 
-      {/* Main App Content View */}
       <div className="main-content">
         <Navbar
           activeBatch={activeBatch}
@@ -97,9 +140,7 @@ export default function App() {
           )}
 
           {currentTab === 'onboarding' && (
-            <CropOnboardingPage
-              onBatchCreated={handleBatchCreated}
-            />
+            <CropOnboardingPage onBatchCreated={handleBatchCreated} />
           )}
 
           {currentTab === 'batches' && (
@@ -112,43 +153,35 @@ export default function App() {
           )}
 
           {currentTab === 'monitoring' && (
-            <MonitoringPage
-              activeBatch={activeBatch}
-            />
+            <MonitoringPage activeBatch={activeBatch} />
           )}
 
           {currentTab === 'diary' && (
-            <DiaryPage
-              activeBatch={activeBatch}
-            />
+            <DiaryPage activeBatch={activeBatch} />
           )}
 
           {currentTab === 'chatbot' && (
-            <ChatbotPage
-              activeBatch={activeBatch}
-            />
+            <ChatbotPage activeBatch={activeBatch} />
           )}
 
           {currentTab === 'alerts' && (
-            <AlertsPage
-              activeBatch={activeBatch}
-            />
+            <AlertsPage activeBatch={activeBatch} />
           )}
 
           {currentTab === 'weather' && (
-            <WeatherPage
-              activeBatch={activeBatch}
-            />
+            <WeatherPage activeBatch={activeBatch} />
           )}
 
           {currentTab === 'market' && (
-            <MarketPricesPage
-              activeBatch={activeBatch}
-            />
+            <MarketPricesPage activeBatch={activeBatch} />
           )}
 
           {currentTab === 'traditional' && (
             <TraditionalGuidancePage />
+          )}
+
+          {currentTab === 'profile' && (
+            <FarmerProfilePage />
           )}
 
           {currentTab === 'admin' && (
