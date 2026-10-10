@@ -4,7 +4,7 @@ import { useLanguage } from '../../context/LanguageContext';
 import TranslatedText from '../TranslatedText';
 import {
   LayoutDashboard, Sprout, Activity, BookOpen, MessageSquare, AlertTriangle,
-  CloudSun, TrendingUp, Scroll, ShieldAlert,
+  CloudSun, TrendingUp, Scroll, ShieldAlert, UserRound,
 } from 'lucide-react';
 
 export default function Sidebar({ currentTab, onSelectTab }) {
@@ -21,6 +21,7 @@ export default function Sidebar({ currentTab, onSelectTab }) {
     { id: 'alerts', label: t('alerts'), icon: AlertTriangle },
     { id: 'weather', label: t('weather'), icon: CloudSun },
     { id: 'market', label: t('market'), icon: TrendingUp },
+    { id: 'profile', label: t('profile'), icon: UserRound },
     { id: 'traditional', label: t('traditional'), icon: Scroll },
   ];
 
