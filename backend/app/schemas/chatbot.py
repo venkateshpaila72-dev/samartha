@@ -27,6 +27,8 @@ class ChatMessageOut(BaseModel):
     sources: list[SourceReference] = Field(default_factory=list)
     suggested_followups: list[str] = Field(default_factory=list)
     batch_context_used: Optional[dict[str, Any]] = None
+    pending_action: Optional[dict[str, Any]] = None
+    action_executed: Optional[dict[str, Any]] = None
     timestamp: str
 
 

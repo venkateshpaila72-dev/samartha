@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { marketService } from '../../services/marketService';
-import { TrendingUp, Store, MapPin, RefreshCw, AlertCircle } from 'lucide-react';
+import { TrendingUp, Store, MapPin, RefreshCw, AlertCircle, ShoppingBag, Truck, ShieldAlert, CheckCircle2, Award } from 'lucide-react';
 import TranslatedText from '../../components/TranslatedText';
 
 export default function MarketPricesPage({ activeBatch }) {
@@ -174,6 +174,119 @@ export default function MarketPricesPage({ activeBatch }) {
               </p>
             </div>
           </section>
+
+          {market.selling_recommendation && (
+            <section className="glass-panel" style={{ padding: '24px', borderLeft: '4px solid #10b981' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <ShoppingBag size={22} color="#34d399" />
+                  <h3 style={{ fontSize: '1.3rem', margin: 0, fontWeight: 700, color: '#34d399' }}>
+                    <TranslatedText text={market.selling_recommendation.decision} />
+                  </h3>
+                </div>
+                <span className={`badge ${market.selling_recommendation.confidence === 'strong' ? 'badge-verified' : market.selling_recommendation.confidence === 'moderate' ? 'badge-info' : 'badge-warning'}`}>
+                  Confidence: {market.selling_recommendation.confidence?.toUpperCase()}
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '18px' }}>
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px', borderRadius: '12px' }}>
+                  <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>Current Market Price</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#34d399' }}>
+                    {market.selling_recommendation.current_price ? `₹${Number(market.selling_recommendation.current_price).toLocaleString('en-IN')}` : '—'} <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>/ qtl</span>
+                  </div>
+                  {market.selling_recommendation.best_alternative_market && (
+                    <div style={{ fontSize: '0.82rem', color: '#cbd5e1', marginTop: '6px' }}>
+                      Best Alt: <strong>{market.selling_recommendation.best_alternative_market}</strong> (₹{Number(market.selling_recommendation.best_alternative_price).toLocaleString('en-IN')})
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px', borderRadius: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f59e0b', fontSize: '0.8rem', marginBottom: '4px' }}>
+                    <ShieldAlert size={14} /> Storage Condition & Risk
+                  </div>
+                  <div style={{ fontSize: '0.88rem', color: '#cbd5e1', lineHeight: 1.4 }}>
+                    <TranslatedText text={market.selling_recommendation.storage_risk} />
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px', borderRadius: '12px' }}>
+                  <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>Weather & Transport Risk</div>
+                  <div style={{ fontSize: '0.88rem', color: '#cbd5e1', lineHeight: 1.4 }}>
+                    <TranslatedText text={market.selling_recommendation.weather_considerations} />
+                  </div>
+                </div>
+
+                <div style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '14px', borderRadius: '12px' }}>
+                  <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '4px' }}>Estimated Net Return</div>
+                  <div style={{ fontSize: '0.88rem', color: '#cbd5e1', lineHeight: 1.4 }}>
+                    <TranslatedText text={market.selling_recommendation.estimated_net_return || 'Requires lot weight and transport distance'} />
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)', padding: '12px 16px', borderRadius: '10px', fontSize: '0.88rem', color: '#cbd5e1' }}>
+                <strong style={{ color: '#34d399' }}>Price Outlook: </strong>
+                <TranslatedText text={market.selling_recommendation.short_term_outlook} />
+              </div>
+
+              {market.selling_recommendation.ranked_options && market.selling_recommendation.ranked_options.length > 0 && (
+                <div style={{ marginTop: '20px' }}>
+                  <h4 style={{ fontSize: '1.05rem', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Award size={16} color="#f59e0b" /> <TranslatedText text="Top Recommended Mandis (Ranked by Expected Net Return)" />
+                  </h4>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.88rem' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#94a3b8' }}>
+                          <th style={{ padding: '8px 10px' }}>Rank</th>
+                          <th style={{ padding: '8px 10px' }}>Mandi / Location</th>
+                          <th style={{ padding: '8px 10px' }}>Modal Price</th>
+                          <th style={{ padding: '8px 10px' }}>Est. Transport</th>
+                          <th style={{ padding: '8px 10px' }}>Est. Net Return</th>
+                          <th style={{ padding: '8px 10px' }}>Notes / Timing</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {market.selling_recommendation.ranked_options.map((opt) => (
+                          <tr key={`rank-${opt.rank}-${opt.market_name}`} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                            <td style={{ padding: '10px', fontWeight: 800, color: opt.rank === 1 ? '#34d399' : '#e2e8f0' }}>
+                              #{opt.rank}
+                            </td>
+                            <td style={{ padding: '10px', fontWeight: 600 }}>
+                              <Store size={13} style={{ display: 'inline', marginRight: '5px' }} />
+                              {opt.market_name}
+                              <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 400 }}>
+                                {opt.district}, {opt.state}
+                              </div>
+                            </td>
+                            <td style={{ padding: '10px', fontWeight: 700, color: '#34d399' }}>
+                              ₹{Number(opt.modal_price).toLocaleString('en-IN')}/qtl
+                            </td>
+                            <td style={{ padding: '10px', color: '#cbd5e1' }}>
+                              <Truck size={13} style={{ display: 'inline', marginRight: '4px' }} />
+                              ₹{opt.transport_cost_per_quintal || 0}/qtl
+                              <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}> (~{opt.distance_km || 0} km)</span>
+                            </td>
+                            <td style={{ padding: '10px', fontWeight: 700, color: '#38bdf8' }}>
+                              ₹{Number(opt.net_return_per_quintal || opt.modal_price).toLocaleString('en-IN')}/qtl
+                            </td>
+                            <td style={{ padding: '10px', color: '#94a3b8', fontSize: '0.82rem' }}>
+                              {opt.notes || 'Normal delivery'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p style={{ color: '#64748b', fontSize: '0.78rem', margin: '10px 0 0 0' }}>
+                    * Transport estimate benchmark: ₹1.50/qtl/km. Actual haulage depends on vehicle capacity, road conditions, and mandi handling charges. Never sell on credit without verified weighment slips.
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
 
           <section className="glass-panel" style={{ padding: '24px' }}>
             <h3 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>

@@ -56,6 +56,15 @@ async def get_batch_market_prices(
     if not crop_name:
         raise ValueError("The selected batch does not have a crop assigned.")
 
+    latest = batch.get("latest_reading") or {}
+    storage_risk = (
+        latest.get("is_temperature_safe") is False
+        or latest.get("is_humidity_safe") is False
+        or latest.get("overall_status") in ("warning", "critical")
+    )
+    quantity_kg = batch.get("quantity_kg")
+    quantity_q = round(quantity_kg / 100.0, 1) if quantity_kg else None
+
     report = await FarmShieldAgent.market_advisory(
         crop_name=crop_name,
         language=current_user.get("preferred_language", "en"),
@@ -63,6 +72,8 @@ async def get_batch_market_prices(
         district=district,
         limit=limit,
         skip=skip,
+        storage_risk_high=storage_risk,
+        quantity_quintals=quantity_q,
     )
     return APIResponse(
         success=True,

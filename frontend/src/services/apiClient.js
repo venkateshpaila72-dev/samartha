@@ -310,3 +310,28 @@ export async function apiRequest(endpoint, options = {}) {
 
   return data;
 }
+
+export async function apiBlobRequest(endpoint, options = {}) {
+  const url = `${BASE_URL}${endpoint}`;
+  const token = getToken();
+
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+
+  const headers = {
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers || {}),
+  };
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const errData = await response.json().catch(() => null);
+    throw new Error(errData?.detail || errData?.message || `HTTP ${response.status} Error`);
+  }
+
+  return await response.blob();
+}

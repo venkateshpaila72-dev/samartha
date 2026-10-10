@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { Mail, MapPin, MessageCircle, UserRound, Languages, Pencil, Save, X } from 'lucide-react';
+import { Mail, MapPin, MessageCircle, UserRound, Languages, Pencil, Save, X, Volume2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { apiRequest } from '../../services/apiClient';
 
@@ -29,7 +29,7 @@ export default function FarmerProfilePage() {
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState({
     full_name: '', phone_number: '', village_or_location: '', preferred_language: 'en',
-    whatsapp_opt_in_completed: false,
+    whatsapp_opt_in_completed: false, auto_read_aloud: false,
   });
 
   useEffect(() => {
@@ -39,6 +39,7 @@ export default function FarmerProfilePage() {
       village_or_location: user?.village_or_location || '',
       preferred_language: user?.preferred_language || 'en',
       whatsapp_opt_in_completed: Boolean(user?.whatsapp_opt_in_completed),
+      auto_read_aloud: Boolean(user?.auto_read_aloud),
     });
   }, [user]);
 
@@ -88,6 +89,7 @@ export default function FarmerProfilePage() {
           village_or_location: form.village_or_location.trim() || null,
           preferred_language: form.preferred_language,
           whatsapp_opt_in_completed: form.whatsapp_opt_in_completed,
+          auto_read_aloud: form.auto_read_aloud,
         }),
       });
       // apiRequest returns the parsed API response; AuthContext owns the user state.
@@ -140,9 +142,18 @@ export default function FarmerProfilePage() {
               <label>WhatsApp phone number<input type="tel" style={inputStyle} placeholder="+91XXXXXXXXXX" value={form.phone_number} onChange={(e) => setField('phone_number', e.target.value)} /></label>
               <label>Village / location<input style={inputStyle} value={form.village_or_location} onChange={(e) => setField('village_or_location', e.target.value)} /></label>
               <label>Preferred language<select style={inputStyle} value={form.preferred_language} onChange={(e) => setField('preferred_language', e.target.value)}>{LANGUAGES.map((language) => <option key={language.value} value={language.value}>{language.label}</option>)}</select></label>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={form.auto_read_aloud}
+                  onChange={(e) => setField('auto_read_aloud', e.target.checked)}
+                  style={{ width: '18px', height: '18px', accentColor: '#10b981' }}
+                />
+                <span style={{ fontSize: '.92rem', color: '#e2e8f0' }}>Automatically read aloud AI Advisor responses</span>
+              </label>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '6px' }}>
                 <button type="submit" className="btn-primary" disabled={saving}><Save size={16} /> {saving ? 'Saving…' : 'Save Profile'}</button>
-                <button type="button" className="btn-secondary" disabled={saving} onClick={() => { setEditing(false); setForm({ full_name: user?.full_name || '', phone_number: user?.phone_number || '', village_or_location: user?.village_or_location || '', preferred_language: user?.preferred_language || 'en' }); }}><X size={16} /> Cancel</button>
+                <button type="button" className="btn-secondary" disabled={saving} onClick={() => { setEditing(false); setForm({ full_name: user?.full_name || '', phone_number: user?.phone_number || '', village_or_location: user?.village_or_location || '', preferred_language: user?.preferred_language || 'en', whatsapp_opt_in_completed: Boolean(user?.whatsapp_opt_in_completed), auto_read_aloud: Boolean(user?.auto_read_aloud) }); }}><X size={16} /> Cancel</button>
               </div>
             </form>
           ) : (
@@ -152,6 +163,7 @@ export default function FarmerProfilePage() {
               <ProfileRow icon={<MessageCircle size={17} />} label="WhatsApp Sandbox Status" value={user?.whatsapp_opt_in_completed ? 'Joined (Ready for WhatsApp Alerts)' : 'Opt-in Required (Send join phrase to Twilio)'} />
               <ProfileRow icon={<MapPin size={17} />} label="Village / Location" value={user?.village_or_location || 'Not provided'} />
               <ProfileRow icon={<Languages size={17} />} label="Preferred Language" value={LANGUAGES.find((item) => item.value === user?.preferred_language)?.label || 'English'} />
+              <ProfileRow icon={<Volume2 size={17} />} label="AI Voice Read-Aloud" value={user?.auto_read_aloud ? 'Enabled (Auto-speaks new AI replies)' : 'Manual (Tap Read aloud when needed)'} />
             </>
           )}
         </div>

@@ -19,9 +19,11 @@ class FarmShieldAgent:
         cls, crop_name: str, language: str = "en",
         state: str | None = None, district: str | None = None,
         limit: int = 50, skip: int = 0,
+        storage_risk_high: bool = False, quantity_quintals: float | None = None,
     ) -> MarketPriceReportOut:
         report = await MarketClient.get_market_prices(
-            crop_name=crop_name, state=state, district=district, limit=limit, skip=skip
+            crop_name=crop_name, state=state, district=district, limit=limit, skip=skip,
+            storage_risk_high=storage_risk_high, quantity_quintals=quantity_quintals,
         )
         target = (language or "en").lower().split("-")[0]
         if target not in SUPPORTED_LANGUAGES or target == "en":

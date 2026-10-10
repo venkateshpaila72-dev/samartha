@@ -5,6 +5,14 @@ import {
   ShieldCheck,
   Search,
   RefreshCw,
+  Calendar,
+  Sun,
+  Droplets,
+  Wind,
+  AlertTriangle,
+  Info,
+  Sprout,
+  Compass,
 } from 'lucide-react';
 
 import { weatherService } from '../../services/monitoringService';
@@ -454,8 +462,182 @@ export default function WeatherPage({ activeBatch }) {
               {t('no_data')}
             </div>
           )}
+
+          {/* 7-Day Daily Forecast & Agronomic Advisory */}
+          {displayWeather.seven_day_forecast?.length > 0 && (
+            <div style={{ marginTop: '30px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.35rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Calendar size={20} color="#38bdf8" /> 7-Day Daily Forecast & Crop Operations Advisory
+                  </h3>
+                  <p style={{ color: '#94a3b8', fontSize: '0.86rem', marginTop: '4px' }}>
+                    Verified daily agronomic guidance for harvesting, solar drying, irrigation, and granary ventilation.
+                  </p>
+                </div>
+                <span className="badge badge-verified">LIVE 7-DAY MODEL</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+                {displayWeather.seven_day_forecast.map((item, idx) => {
+                  const isRainy = (item.precipitation_probability_percent || 0) >= 35.0 || (item.precipitation_sum_mm || 0) >= 2.0;
+                  return (
+                    <div
+                      key={item.date || idx}
+                      className="glass-panel"
+                      style={{
+                        padding: '20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '12px',
+                        borderLeft: isRainy ? '4px solid #f59e0b' : '4px solid #10b981',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <div style={{ fontWeight: '700', fontSize: '1.05rem', color: '#f8fafc' }}>
+                            {item.day_name}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                            {item.date}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '1.25rem', fontWeight: '800', color: '#38bdf8' }}>
+                            {item.temp_max_c}°
+                          </span>
+                          <span style={{ fontSize: '0.9rem', color: '#94a3b8', marginLeft: '4px' }}>
+                            / {item.temp_min_c}°C
+                          </span>
+                          <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                            {item.weather_condition}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '14px', fontSize: '0.8rem', color: '#cbd5e1', background: 'rgba(255, 255, 255, 0.04)', padding: '8px 12px', borderRadius: '8px' }}>
+                        <div>
+                          💧 Rain Chance: <strong style={{ color: isRainy ? '#f59e0b' : '#34d399' }}>{item.precipitation_probability_percent}%</strong> ({item.precipitation_sum_mm}mm)
+                        </div>
+                        <div>
+                          💨 Wind: <strong>{item.wind_speed_max_kmh} km/h</strong>
+                        </div>
+                      </div>
+
+                      {/* Practical Farming Operational Guidance */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.82rem', lineHeight: 1.4 }}>
+                        <div style={{ color: '#cbd5e1' }}>
+                          🌾 <strong>Harvesting:</strong> {item.harvest_recommendation}
+                        </div>
+                        <div style={{ color: '#cbd5e1' }}>
+                          ☀️ <strong>Solar Drying:</strong> {item.drying_recommendation}
+                        </div>
+                        <div style={{ color: '#cbd5e1' }}>
+                          💧 <strong>Irrigation:</strong> {item.irrigation_recommendation}
+                        </div>
+                        <div style={{ color: '#cbd5e1' }}>
+                          💨 <strong>Ventilation:</strong> {item.ventilation_recommendation}
+                        </div>
+                        <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>
+                          🐛 <strong>Pest/Mould Risk:</strong> {item.pest_disease_risk}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 30-Day Seasonal Agro-Climatic Outlook */}
+          {displayWeather.thirty_day_outlook && (
+            <div style={{ marginTop: '36px' }}>
+              <div className="glass-panel" style={{ padding: '24px', borderLeft: '4px solid #38bdf8' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
+                  <div>
+                    <span className="badge badge-info" style={{ marginBottom: '6px' }}>
+                      <Compass size={12} /> Extended Climate Model
+                    </span>
+                    <h3 style={{ fontSize: '1.35rem', color: '#f8fafc' }}>
+                      {displayWeather.thirty_day_outlook.coverage}
+                    </h3>
+                  </div>
+                  <div style={{
+                    fontSize: '0.76rem',
+                    color: '#fbbf24',
+                    background: 'rgba(245, 158, 11, 0.15)',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    maxWidth: '480px'
+                  }}>
+                    ⚠️ <strong>Uncertainty Notice:</strong> {displayWeather.thirty_day_outlook.uncertainty_level}
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '14px', borderRadius: '10px' }}>
+                    <div style={{ color: '#38bdf8', fontWeight: '600', fontSize: '0.88rem', marginBottom: '4px' }}>
+                      🌡️ Temperature Pattern
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: 1.5 }}>
+                      {displayWeather.thirty_day_outlook.temperature_outlook_summary}
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '14px', borderRadius: '10px' }}>
+                    <div style={{ color: '#34d399', fontWeight: '600', fontSize: '0.88rem', marginBottom: '4px' }}>
+                      🌧️ Precipitation Outlook
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: 1.5 }}>
+                      {displayWeather.thirty_day_outlook.precipitation_outlook_summary}
+                    </div>
+                  </div>
+                  <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '14px', borderRadius: '10px' }}>
+                    <div style={{ color: '#f59e0b', fontWeight: '600', fontSize: '0.88rem', marginBottom: '4px' }}>
+                      💡 Strategic Advisory
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#cbd5e1', lineHeight: 1.5 }}>
+                      {displayWeather.thirty_day_outlook.seasonal_advisory}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 10-Day Dekad Periods */}
+                <h4 style={{ fontSize: '1.05rem', color: '#f8fafc', marginBottom: '12px' }}>
+                  Dekad Progression (10-Day Outlook Phases)
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                  {displayWeather.thirty_day_outlook.periods?.map((p, pIdx) => (
+                    <div key={pIdx} style={{
+                      background: 'rgba(15, 23, 42, 0.7)',
+                      padding: '16px',
+                      borderRadius: '10px',
+                      border: '1px solid rgba(255, 255, 255, 0.06)'
+                    }}>
+                      <div style={{ fontWeight: '700', color: '#38bdf8', fontSize: '0.92rem' }}>
+                        {p.period_name}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '8px' }}>
+                        {p.date_range}
+                      </div>
+                      <div style={{ fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                        Target Temp: <strong>{p.expected_temp_range_c}</strong>
+                      </div>
+                      <div style={{ fontSize: '0.82rem', color: '#cbd5e1', marginBottom: '8px' }}>
+                        Rainfall: <strong>{p.expected_rainfall}</strong>
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#94a3b8', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '6px', lineHeight: 1.4 }}>
+                        {p.farming_advisory}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
+
     </div>
   );
 }

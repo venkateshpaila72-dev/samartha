@@ -51,6 +51,7 @@ async def register(payload: UserRegister):
         "village_or_location": payload.village_or_location,
         "whatsapp_url": payload.whatsapp_url,
         "whatsapp_opt_in_completed": payload.whatsapp_opt_in_completed or False,
+        "auto_read_aloud": payload.auto_read_aloud or False,
         "created_at": now_iso,
     }
 

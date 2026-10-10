@@ -183,10 +183,11 @@ class RAGAdapter:
         """Retrieves top-k relevant knowledge combining Pinecone Vector DB & ICAR ITK storage records."""
         combined: List[SourceReference] = []
 
-        # 1. Pinecone Vector DB retrieval if configured
+        # 1. Pinecone Vector DB retrieval if configured (keep high-confidence matches)
         if cls.is_pinecone_configured():
-            pinecone_results = cls._retrieve_from_pinecone(query=query, top_k=2)
-            combined.extend(pinecone_results)
+            pinecone_results = cls._retrieve_from_pinecone(query=query, top_k=top_k)
+            high_conf = [r for r in pinecone_results if (r.relevance_score or 0.0) >= 0.5]
+            combined.extend(high_conf)
 
         # 2. Local curated traditional storage knowledge
         needed_more = max(1, top_k - len(combined))

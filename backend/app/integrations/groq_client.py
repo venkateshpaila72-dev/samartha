@@ -62,44 +62,73 @@ class GroqClient:
                 logger.error(f"Error calling Groq API: {e}")
 
         # Intelligent Fallback Advisor based on assembled context
+        if context_data.get("is_greeting"):
+            f_profile = context_data.get("farmer_profile") or {}
+            f_name = f_profile.get("name")
+            name_greet = f", {f_name}" if f_name and f_name != "Farmer" else ""
+            return f"Hello{name_greet}! 👋 How is your farm doing today? I can help you check your crop storage, weather, market prices, or harvesting plans.", False
+
         crop_prof = context_data.get("crop_profile") or {}
         crop_name = crop_prof.get("crop_name", "your crop")
         latest = context_data.get("latest_reading") or {}
         alerts = context_data.get("active_alerts") or []
         rag = context_data.get("rag_sources") or []
 
-        advisory_lines = []
-        advisory_lines.append(f"### Storage Advisory for {crop_name}\n")
+        t = latest.get("temperature_c")
+        rh = latest.get("humidity_percent")
+        t_min = crop_prof.get("recommended_temp_min_c", 15.0)
+        t_max = crop_prof.get("recommended_temp_max_c", 22.0)
+        rh_min = crop_prof.get("recommended_rh_min_percent", 50.0)
+        rh_max = crop_prof.get("recommended_rh_max_percent", 65.0)
 
+        # Check if user query relates to temperature or storage problems
+        q_lower = user_message.lower()
+        is_temp_violation = (t is not None and t > t_max) or "too high" in q_lower or "temperature" in q_lower or "hot" in q_lower
+
+        if is_temp_violation and t is not None:
+            alert_action = alerts[0].get("action") if alerts else "Increase ventilation and shade storage structure immediately."
+            alert_notice = f" An active environmental alert has been triggered for this condition." if alerts else ""
+            lines = [
+                f"**What is happening?**",
+                f"The measured storage temperature for {crop_name} is **{t}°C**, which exceeds the verified safe range of **{t_min}°C–{t_max}°C**.{alert_notice}",
+                "",
+                f"**What should you do?**",
+                f"1. **Immediate action:** {alert_action}",
+                f"2. **Preventive step:** Keep ventilators open during cooler dawn/dusk hours (15°C–20°C ambient) and install reflective rooftop shading to deflect solar heat.",
+                f"3. **When to check again:** Take a fresh sensor measurement in 3 hours to verify that internal storage temperature is declining.",
+                "",
+                f"**Why?**",
+                f"Sustained temperatures above {t_max}°C accelerate grain respiration, cause dry matter shrinkage, and rapidly incubate storage insect pests (weevils/borers).",
+            ]
+            if crop_prof.get("source"):
+                lines.extend(["", f"**Sources:** {crop_prof.get('source')} Standards."])
+            return "\n".join(lines), False
+
+        # Structured response for general storage or crop inquiries
+        lines = [
+            f"**What is happening?**",
+            f"Reviewing storage status for {crop_name}.",
+        ]
         if latest:
-            t = latest.get("temperature_c", "N/A")
-            rh = latest.get("humidity_percent", "N/A")
-            advisory_lines.append(f"- **Current Storage Readings**: Temperature is **{t}°C** and Relative Humidity is **{rh}%**.")
+            lines.append(f"Current storage telemetry indicates temperature at **{t}°C** (target: {t_min}°C–{t_max}°C) and relative humidity at **{rh}%** (target: {rh_min}%–{rh_max}%).")
+        else:
+            lines.append(f"Verified guidelines for {crop_name} specify safe temperature between **{t_min}°C–{t_max}°C** and humidity between **{rh_min}%–{rh_max}%**.")
 
-        if crop_prof:
-            t_min = crop_prof.get("recommended_temp_min_c")
-            t_max = crop_prof.get("recommended_temp_max_c")
-            rh_min = crop_prof.get("recommended_rh_min_percent")
-            rh_max = crop_prof.get("recommended_rh_max_percent")
-            safe_m = crop_prof.get("safe_moisture_percent")
-            advisory_lines.append(f"- **Verified ICAR Target Limits**: Temperature should stay between **{t_min}°C – {t_max}°C**, RH between **{rh_min}% – {rh_max}%**, and maximum safe grain moisture is **{safe_m}%**.")
+        lines.extend([
+            "",
+            f"**What should you do?**",
+            f"1. Maintain regular monitoring of storage temperature and grain moisture.",
+            f"2. Follow verified ventilation timing: {crop_prof.get('ventilation_guidance', 'ventilate when outdoor air is cooler and drier than storage air')}.",
+            f"3. Inspect bags and perimeter for early insect activity weekly.",
+            "",
+            f"**Why?**",
+            f"Controlling ambient moisture and heat prevents grain spoiling, fungal toxins, and weight loss during storage.",
+        ])
 
-        if alerts:
-            advisory_lines.append(f"\n⚠️ **Active Storage Alert Warning**:")
-            for a in alerts:
-                advisory_lines.append(f"  - Condition: `{a.get('condition')}` | Recommended Action: {a.get('action')}")
+        if crop_prof.get("source"):
+            lines.extend(["", f"**Sources:** {crop_prof.get('source')} Post-Harvest Guidelines."])
 
-        if crop_prof.get("ventilation_guidance"):
-            advisory_lines.append(f"\n- **Ventilation Guidance**: {crop_prof.get('ventilation_guidance')}")
-
-        if rag:
-            advisory_lines.append(f"\n- **Traditional Agricultural Knowledge**: {rag[0].title} — {rag[0].content_excerpt}")
-
-        advisory_lines.append(
-            "\n*Note: Recommendations are compiled from verified scientific references (ICAR/FAO) and current storage readings.*"
-        )
-
-        return "\n".join(advisory_lines), False
+        return "\n".join(lines), False
 
     @classmethod
     async def format_whatsapp_storage_alert(

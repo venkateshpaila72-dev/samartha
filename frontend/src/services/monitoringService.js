@@ -1,4 +1,4 @@
-import { apiRequest } from './apiClient';
+import { apiRequest, apiBlobRequest } from './apiClient';
 
 export const monitoringService = {
   async getMonitoringSummary(batchId) {
@@ -95,6 +95,34 @@ export const chatbotService = {
     const res = await apiRequest(`/chat/conversations/${conversationId}/messages`, {
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+    return res.data;
+  },
+
+  async confirmAction(conversationId, actionPayload) {
+    const res = await apiRequest(`/chat/conversations/${conversationId}/confirm-action`, {
+      method: 'POST',
+      body: JSON.stringify(actionPayload),
+    });
+    return res.data;
+  },
+};
+
+export const speechService = {
+  async synthesizeSpeech(text, language = 'en') {
+    const blob = await apiBlobRequest('/speech/synthesize', {
+      method: 'POST',
+      body: JSON.stringify({ text, language }),
+    });
+    return blob;
+  },
+
+  async transcribeAudio(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await apiRequest('/speech/transcribe', {
+      method: 'POST',
+      body: formData,
     });
     return res.data;
   },

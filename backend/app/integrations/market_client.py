@@ -17,6 +17,8 @@ from app.schemas.market import (
     MarketPriceItem,
     MarketPricePoint,
     MarketPriceReportOut,
+    RankedMarketOption,
+    SellingRecommendationOut,
 )
 
 logger = logging.getLogger(__name__)
@@ -140,6 +142,8 @@ class MarketClient:
         district: Optional[str] = None,
         limit: int = 50,
         skip: int = 0,
+        storage_risk_high: bool = False,
+        quantity_quintals: Optional[float] = None,
     ) -> MarketPriceReportOut:
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         crop = (crop_name or "").strip()
@@ -306,6 +310,19 @@ class MarketClient:
             else None
         )
         latest_date = historical[-1].date if historical else "unknown"
+
+        # Generate structured selling recommendation & market ranking
+        selling_rec = cls.generate_selling_recommendation(
+            crop_name=crop,
+            items=items,
+            historical=historical,
+            forecasts=forecasts,
+            trend=trend,
+            average_price=average,
+            storage_risk_high=storage_risk_high,
+            quantity_quintals=quantity_quintals,
+        )
+
         return MarketPriceReportOut(
             crop_name=crop,
             latest_prices=items,
@@ -318,8 +335,133 @@ class MarketClient:
                 f"Showing stored mandi observations for {crop}. Latest dated history: {latest_date}. "
                 "Compare the market and report date before deciding when to sell."
             ),
+            selling_recommendation=selling_rec,
             retrieval_timestamp=timestamp,
             freshness="cached",
+        )
+
+    @classmethod
+    def generate_selling_recommendation(
+        cls,
+        crop_name: str,
+        items: list[MarketPriceItem],
+        historical: list[MarketPricePoint],
+        forecasts: list[MarketPriceForecastPoint],
+        trend: str,
+        average_price: Optional[float],
+        storage_risk_high: bool = False,
+        quantity_quintals: Optional[float] = None,
+        transport_cost_per_quintal: float = 40.0,
+    ) -> SellingRecommendationOut:
+        if not items:
+            return SellingRecommendationOut(
+                decision_summary="Insufficient market data to generate selling recommendation",
+                current_market_price_per_quintal=None,
+                best_alternative_market=None,
+                best_alternative_price_per_quintal=None,
+                short_term_price_outlook="No recent mandi price observations recorded.",
+                weather_considerations="Verify local mandi road and weather conditions prior to dispatch.",
+                storage_risk_assessment="Ensure storage temperature and humidity remain within safe thresholds.",
+                confidence_level="Limited",
+                ranked_options=[],
+                formatted_advisory="No reliable mandi records available for this crop to formulate a price-based selling recommendation.",
+            )
+
+        # 1. Rank available mandi selling options by modal price and estimated net return
+        sorted_items = sorted(items, key=lambda x: x.modal_price_per_quintal, reverse=True)
+        ranked: list[RankedMarketOption] = []
+        seen_markets = set()
+
+        for idx, it in enumerate(sorted_items):
+            m_key = (it.market_name, it.district)
+            if m_key in seen_markets:
+                continue
+            seen_markets.add(m_key)
+            rank_num = len(ranked) + 1
+            if rank_num > 5:
+                break
+
+            dist_cat = "Local Mandi" if idx == 0 else ("Nearby District" if idx <= 2 else "Regional Market")
+            est_net = round(it.modal_price_per_quintal - (transport_cost_per_quintal * (1.0 if idx == 0 else 1.5)), 2)
+
+            ranked.append(
+                RankedMarketOption(
+                    rank=rank_num,
+                    market_name=it.market_name,
+                    district=it.district,
+                    state=it.state,
+                    modal_price_per_quintal=it.modal_price_per_quintal,
+                    price_date=it.price_date,
+                    transport_distance_category=dist_cat,
+                    estimated_net_return_per_quintal=est_net,
+                    selection_rationale=f"Reported ₹{it.modal_price_per_quintal:,.0f}/q on {it.price_date}. Est. net ₹{est_net:,.0f}/q after transport.",
+                    source=it.source,
+                )
+            )
+
+        top_market = ranked[0] if ranked else None
+        alt_market = ranked[1] if len(ranked) > 1 else None
+
+        current_val = top_market.modal_price_per_quintal if top_market else average_price
+        alt_name = f"{alt_market.market_name} ({alt_market.district})" if alt_market else None
+        alt_val = alt_market.modal_price_per_quintal if alt_market else None
+
+        # 2. Determine short-term price outlook
+        if trend == "rising":
+            outlook_text = f"Indicative 7-day model points to an upward price trend (+{trend}). Moderate upside if holding short-term."
+            base_decision = "Consider holding for upcoming 3–5 days"
+            confidence = "Moderate"
+        elif trend == "declining":
+            outlook_text = "Indicative 7-day model reflects declining arrivals or soften prices. Holding risks margin erosion."
+            base_decision = "Consider selling today"
+            confidence = "Moderate"
+        else:
+            outlook_text = "Prices are holding steady in a stable band. Minimal short-term fluctuation expected."
+            base_decision = "Consider selling today at highest-paying nearby mandi"
+            confidence = "Moderate"
+
+        # 3. Factor in Storage Risk: if storage risk is critical, immediate sale overrides price speculation!
+        if storage_risk_high:
+            decision_summary = "Recommendation: Immediate sale recommended due to storage risk"
+            storage_risk_desc = "CRITICAL: Storage readings exceed safe thresholds. Immediate liquidation or specialized aeration is required to prevent mold and insect degradation."
+            confidence = "Strong"
+        else:
+            decision_summary = f"Recommendation: {base_decision}"
+            storage_risk_desc = "SAFE: Current storage conditions are within safe bounds. Crop can be safely stored if waiting for better prices."
+
+        weather_desc = "Check 7-day forecast before transport; cover transport vehicles during rainy intervals."
+
+        net_total = None
+        if quantity_quintals and current_val:
+            net_total = round(quantity_quintals * (current_val - transport_cost_per_quintal), 2)
+
+        # 4. Formulate strictly formatted advisory
+        advisory_lines = [
+            f"**{decision_summary}**\n",
+            f"- **Current available market price:** ₹{current_val:,.0f} / Quintal ({top_market.market_name if top_market else 'Average'})",
+        ]
+        if alt_name and alt_val:
+            advisory_lines.append(f"- **Best available alternative market:** {alt_name} at ₹{alt_val:,.0f} / Quintal ({alt_market.price_date})")
+
+        advisory_lines.append(f"- **Short-term price outlook:** {outlook_text}")
+        advisory_lines.append(f"- **Weather considerations:** {weather_desc}")
+        advisory_lines.append(f"- **Storage risk:** {storage_risk_desc}")
+        if net_total:
+            advisory_lines.append(f"- **Estimated net return:** ₹{net_total:,.0f} for {quantity_quintals} quintals")
+        advisory_lines.append(f"- **Confidence:** {confidence} (based on verified APMC records and statistical regression; prices not guaranteed)")
+
+        return SellingRecommendationOut(
+            decision_summary=decision_summary,
+            current_market_price_per_quintal=current_val,
+            best_alternative_market=alt_name,
+            best_alternative_price_per_quintal=alt_val,
+            short_term_price_outlook=outlook_text,
+            weather_considerations=weather_desc,
+            storage_risk_assessment=storage_risk_desc,
+            estimated_net_return_total=net_total,
+            confidence_level=confidence,
+            ranked_options=ranked,
+            formatted_advisory="\n".join(advisory_lines),
         )
 
     @staticmethod
@@ -335,6 +477,7 @@ class MarketClient:
             average_modal_price=None,
             price_trend="unknown",
             recommendation=message,
+            selling_recommendation=None,
             retrieval_timestamp=timestamp,
             freshness="unavailable",
         )

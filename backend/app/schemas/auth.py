@@ -22,6 +22,7 @@ class UserRegister(BaseModel):
     village_or_location: Optional[str] = None
     whatsapp_url: Optional[str] = None
     whatsapp_opt_in_completed: Optional[bool] = False
+    auto_read_aloud: Optional[bool] = False
 
 
 class UserLogin(BaseModel):
@@ -46,6 +47,7 @@ class UserOut(BaseModel):
     village_or_location: Optional[str] = None
     whatsapp_url: Optional[str] = None
     whatsapp_opt_in_completed: Optional[bool] = False
+    auto_read_aloud: Optional[bool] = False
     created_at: Optional[str] = None
 
 
@@ -56,6 +58,7 @@ class UserUpdate(BaseModel):
     village_or_location: Optional[str] = None
     whatsapp_url: Optional[str] = None
     whatsapp_opt_in_completed: Optional[bool] = None
+    auto_read_aloud: Optional[bool] = None
 
 
 Token.model_rebuild()

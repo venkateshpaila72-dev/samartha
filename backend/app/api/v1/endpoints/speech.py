@@ -9,10 +9,11 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Response,
     UploadFile,
     status,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.dependencies import get_current_user
 from app.integrations.azure_speech_client import AzureSpeechClient
@@ -138,3 +139,44 @@ async def transcribe_audio_file(
             language=lang_code,
         ),
     )
+
+
+class SynthesizeRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=3000)
+    language: Optional[str] = "en"
+
+
+@router.post("/speech/synthesize")
+async def synthesize_speech(
+    payload: SynthesizeRequest,
+    current_user=Depends(get_current_user),
+):
+    """Synthesizes text into speech audio using Azure Text-to-Speech (Neural).
+    Falls back gracefully if Azure credentials are not available.
+    """
+    if not AzureSpeechClient.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Azure Text-to-Speech service is not configured in this environment.",
+        )
+
+    # Use preferred language if payload language not explicitly specified
+    user_lang = getattr(current_user, "preferred_language", None) or (current_user.get("preferred_language") if isinstance(current_user, dict) else "en")
+    target_lang = payload.language or user_lang or "en"
+
+    try:
+        audio_bytes = await AzureSpeechClient.synthesize_speech(
+            text=payload.text,
+            language=target_lang,
+        )
+        return Response(
+            content=audio_bytes,
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": "inline; filename=speech.mp3"},
+        )
+    except Exception as exc:
+        logger.exception("Azure Speech synthesis failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Speech synthesis service failed.",
+        ) from exc

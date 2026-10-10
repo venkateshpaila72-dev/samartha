@@ -2,6 +2,7 @@
 
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from app.api.dependencies import get_current_user, get_owned_batch
 from app.schemas.chatbot import (
@@ -97,5 +98,36 @@ async def post_message(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+class ConfirmActionPayload(BaseModel):
+    action_type: str = "update_harvest_date"
+    batch_id: str
+    harvest_date: str
+    crop_name: Optional[str] = "crop"
+
+
+@router.post("/conversations/{conversation_id}/confirm-action", response_model=APIResponse[ChatMessageOut])
+async def confirm_conversation_action(
+    conversation_id: str,
+    payload: ConfirmActionPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        reply = await ChatbotService.confirm_action(
+            user_id=current_user["id"],
+            convo_id=conversation_id,
+            action_data=payload.model_dump(),
+            current_user=current_user,
+        )
+        return APIResponse(
+            success=True,
+            message="Farming activity action confirmed and recorded successfully.",
+            data=reply,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
