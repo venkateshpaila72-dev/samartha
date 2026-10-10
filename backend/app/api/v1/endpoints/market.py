@@ -100,7 +100,7 @@ async def sync_market_data(
     except Exception as exc:
         # Do not leak provider responses, API keys, or request URLs into the client response.
         import logging
-        logging.getLogger(__name__).exception("Scheduled market-price ingestion failed")
+        logging.getLogger(__name__).error("Scheduled market-price ingestion failed (%s)", type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Market provider ingestion failed. Check backend logs for the provider error.",
