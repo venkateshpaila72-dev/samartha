@@ -1,7 +1,79 @@
 import React, { useMemo, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Shield, Sprout, ArrowRight, ShieldCheck, MessageCircle } from 'lucide-react';
+import { apiRequest } from '../../services/apiClient';
+import {
+  Shield,
+  Sprout,
+  ArrowRight,
+  ShieldCheck,
+  MessageCircle,
+  MapPin,
+  Navigation,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+} from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+
+const INDIAN_STATES = [
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chhattisgarh',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal',
+  'Andaman and Nicobar Islands',
+  'Chandigarh',
+  'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi',
+  'Jammu and Kashmir',
+  'Ladakh',
+  'Lakshadweep',
+  'Puducherry',
+];
+
+const COMMON_CROPS = [
+  'Tomato',
+  'Onion',
+  'Potato',
+  'Paddy (Rice)',
+  'Wheat',
+  'Maize (Corn)',
+  'Cotton',
+  'Soybean',
+  'Chilli',
+  'Turmeric',
+  'Sugarcane',
+  'Groundnut',
+  'Gram (Chickpea)',
+  'Banana',
+  'Mango',
+  'Mustard',
+  'Garlic',
+  'Ginger',
+];
 
 export default function AuthPages() {
   const { login, register } = useAuth();
@@ -14,6 +86,14 @@ export default function AuthPages() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [whatsappUrl, setWhatsappUrl] = useState('');
   const [village, setVillage] = useState('');
+  const [state, setState] = useState('');
+  const [district, setDistrict] = useState('');
+  const [selectedCrop, setSelectedCrop] = useState('');
+  const [latitude, setLatitude] = useState(null);
+  const [longitude, setLongitude] = useState(null);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState(null);
+  const [locationSuccess, setLocationSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -31,6 +111,66 @@ export default function AuthPages() {
     setPassword('');
   };
 
+  const handleDetectLocation = () => {
+    setLocationError(null);
+    setLocationSuccess(null);
+
+    if (!navigator.geolocation) {
+      setLocationError(
+        'Geolocation is not supported by your browser. Please select your state and district manually.'
+      );
+      return;
+    }
+
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const lat = pos.coords.latitude;
+          const lon = pos.coords.longitude;
+          setLatitude(lat);
+          setLongitude(lon);
+
+          const res = await apiRequest(
+            `/auth/reverse-geocode?latitude=${lat}&longitude=${lon}`
+          );
+          if (res?.data) {
+            const detectedState = res.data.state || '';
+            const detectedDistrict = res.data.district || '';
+            if (detectedState) setState(detectedState);
+            if (detectedDistrict) setDistrict(detectedDistrict);
+            setLocationSuccess(
+              `Location detected: ${detectedDistrict ? detectedDistrict + ', ' : ''}${detectedState}`
+            );
+          }
+        } catch (err) {
+          setLocationError(
+            err.message ||
+              'Reverse-geocoding failed. Please select your state and district manually.'
+          );
+        } finally {
+          setLocating(false);
+        }
+      },
+      (err) => {
+        setLocating(false);
+        let msg = 'Failed to detect location. Please select manually.';
+        if (err.code === 1) {
+          msg =
+            'Location permission denied. Please select your state and district manually.';
+        } else if (err.code === 2) {
+          msg =
+            'Location is unavailable. Please select your state and district manually.';
+        } else if (err.code === 3) {
+          msg =
+            'Location request timed out. Please select your state and district manually.';
+        }
+        setLocationError(msg);
+      },
+      { timeout: 10000, enableHighAccuracy: false }
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -46,6 +186,11 @@ export default function AuthPages() {
           phone_number: phoneNumber.trim() || null,
           whatsapp_url: currentWhatsAppUrl || null,
           village_or_location: village.trim() || null,
+          state: state.trim() || null,
+          district: district.trim() || null,
+          selected_crop: selectedCrop.trim() || null,
+          latitude: latitude || null,
+          longitude: longitude || null,
         });
       } else {
         await login(email, password, mode);
@@ -249,11 +394,156 @@ export default function AuthPages() {
                 </select>
               </Field>
 
+              {/* Location Detection Banner */}
+              <div
+                style={{
+                  background: 'rgba(16, 185, 129, 0.05)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  marginBottom: '2px',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <MapPin size={18} color="#10b981" />
+                    <div>
+                      <div
+                        style={{
+                          fontSize: '0.86rem',
+                          fontWeight: 600,
+                          color: '#f1f5f9',
+                        }}
+                      >
+                        Farmer Location & Mandi State
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                        Required for state-wise mandi price synchronization
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleDetectLocation}
+                    disabled={locating}
+                    className="btn-secondary"
+                    style={{
+                      padding: '7px 12px',
+                      fontSize: '0.82rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      border: '1px solid rgba(16, 185, 129, 0.4)',
+                      background: 'rgba(16, 185, 129, 0.1)',
+                      color: '#34d399',
+                      cursor: locating ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {locating ? (
+                      <>
+                        <Loader2 size={14} className="spin-animation" />
+                        Detecting...
+                      </>
+                    ) : (
+                      <>
+                        <Navigation size={14} />
+                        Detect My Location
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {locationSuccess && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      fontSize: '0.8rem',
+                      color: '#34d399',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <CheckCircle2 size={14} />
+                    {locationSuccess}
+                  </div>
+                )}
+
+                {locationError && (
+                  <div
+                    style={{
+                      marginTop: '8px',
+                      fontSize: '0.8rem',
+                      color: '#f87171',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                  >
+                    <AlertCircle size={14} />
+                    {locationError}
+                  </div>
+                )}
+              </div>
+
+              {/* State Field */}
+              <Field label="State (Required for Mandi Prices)">
+                <select
+                  required
+                  className="input-field"
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                >
+                  <option value="">-- Select Your State --</option>
+                  {INDIAN_STATES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              {/* District Field */}
+              <Field label="District (optional)">
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="e.g. Nashik, Warangal, Kolar"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                />
+              </Field>
+
+              {/* Primary / Selected Crop Field */}
+              <Field label="Primary Crop (for Market Prices)">
+                <select
+                  className="input-field"
+                  value={selectedCrop}
+                  onChange={(e) => setSelectedCrop(e.target.value)}
+                >
+                  <option value="">-- Select Primary Crop --</option>
+                  {COMMON_CROPS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
               <Field label="Village / Location (optional)">
                 <input
                   type="text"
                   className="input-field"
-                  placeholder="Village, town or district"
+                  placeholder="Village, town or locality"
                   value={village}
                   onChange={(e) => setVillage(e.target.value)}
                 />

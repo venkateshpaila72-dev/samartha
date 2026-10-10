@@ -20,6 +20,11 @@ class UserRegister(BaseModel):
     preferred_language: str = Field(default="en", pattern="^(en|hi|te|ta|kn|mr|pa|bn)$")
     phone_number: Optional[str] = None
     village_or_location: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    selected_crop: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     whatsapp_url: Optional[str] = None
 
 
@@ -43,6 +48,13 @@ class UserOut(BaseModel):
     preferred_language: str
     phone_number: Optional[str] = None
     village_or_location: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    selected_crop: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    last_market_sync_at: Optional[str] = None
+    last_market_sync_summary: Optional[dict] = None
     whatsapp_url: Optional[str] = None
     created_at: Optional[str] = None
 
@@ -52,6 +64,13 @@ class UserUpdate(BaseModel):
     preferred_language: Optional[str] = Field(default=None, pattern="^(en|hi|te|ta|kn|mr|pa|bn)$")
     phone_number: Optional[str] = None
     village_or_location: Optional[str] = None
+    state: Optional[str] = None
+    district: Optional[str] = None
+    selected_crop: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    last_market_sync_at: Optional[str] = None
+    last_market_sync_summary: Optional[dict] = None
     whatsapp_url: Optional[str] = None
 
 

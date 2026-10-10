@@ -1,18 +1,28 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import { marketService } from '../../services/marketService';
-import { TrendingUp, Store, MapPin, RefreshCw, AlertCircle } from 'lucide-react';
+import { TrendingUp, Store, MapPin, RefreshCw, AlertCircle, CheckCircle, Sparkles } from 'lucide-react';
 import TranslatedText from '../../components/TranslatedText';
 
 export default function MarketPricesPage({ activeBatch }) {
+  const { user } = useAuth();
   const batchCrop = activeBatch?.crop_profile?.crop_name || '';
   const [cropQuery, setCropQuery] = useState(() => {
-    try { return batchCrop || localStorage.getItem('farmshield_selected_crop') || ''; } catch { return batchCrop; }
+    try { return batchCrop || localStorage.getItem('farmshield_selected_crop') || user?.selected_crop || 'Tomato'; } catch { return batchCrop || 'Tomato'; }
   });
-  const [state, setState] = useState(() => { try { return localStorage.getItem('farmshield_state') || ''; } catch { return ''; } });
-  const [district, setDistrict] = useState(() => { try { return localStorage.getItem('farmshield_district') || ''; } catch { return ''; } });
+  const [state, setState] = useState(() => { try { return localStorage.getItem('farmshield_state') || user?.state || ''; } catch { return user?.state || ''; } });
+  const [district, setDistrict] = useState(() => { try { return localStorage.getItem('farmshield_district') || user?.district || ''; } catch { return user?.district || ''; } });
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (user?.state && !state) setState(user.state);
+    if (user?.district && !district) setDistrict(user.district);
+    if (user?.selected_crop && !cropQuery && !batchCrop) setCropQuery(user.selected_crop);
+  }, [user]);
 
   const fetchPrices = useCallback(async (crop = cropQuery) => {
     if (!crop?.trim()) {
@@ -39,6 +49,38 @@ export default function MarketPricesPage({ activeBatch }) {
       setLoading(false);
     }
   }, [cropQuery, state, district]);
+
+  const handleMarketSync = async () => {
+    const cropToSync = cropQuery.trim() || batchCrop.trim();
+    if (!cropToSync) {
+      setError('Please specify a crop name before syncing market prices.');
+      return;
+    }
+
+    setSyncing(true);
+    setSyncMessage('');
+    setError('');
+    try {
+      const res = await marketService.syncMarketPrices(cropToSync, {
+        state: state.trim(),
+        district: district.trim(),
+      });
+      const recordsCount = res?.sync_result?.records_inserted_or_updated || 0;
+      const todayDate = res?.sync_result?.today_date || new Date().toISOString().slice(0, 10);
+      setSyncMessage(
+        `Market sync completed for ${cropToSync}! Successfully loaded and stored ${recordsCount} mandi observation(s) for ${todayDate} into the database.`
+      );
+      if (res?.report) {
+        setMarket(res.report);
+      } else {
+        await fetchPrices(cropToSync);
+      }
+    } catch (err) {
+      setError(err?.message || 'Failed to sync market prices. Please check connection and try again.');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   useEffect(() => {
     if (batchCrop) {
@@ -124,25 +166,98 @@ export default function MarketPricesPage({ activeBatch }) {
               style={{ minWidth: '160px' }}
             />
           </label>
-          <button type="submit" className="btn-primary" disabled={loading} style={{ alignSelf: 'end' }}>
-            {loading ? <TranslatedText text="Loading…" /> : <TranslatedText text="Search Prices" />}
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignSelf: 'end' }}>
+            <button type="submit" className="btn-primary" disabled={loading || syncing}>
+              {loading ? <TranslatedText text="Loading…" /> : <TranslatedText text="Search Prices" />}
+            </button>
+            <button
+              type="button"
+              onClick={handleMarketSync}
+              disabled={loading || syncing}
+              className="btn-secondary"
+              title="Sync today's mandi prices for this crop to the database"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'rgba(16, 185, 129, 0.15)',
+                border: '1px solid rgba(16, 185, 129, 0.4)',
+                color: '#34d399',
+                fontWeight: '600',
+                padding: '10px 16px',
+                borderRadius: '8px',
+                cursor: (loading || syncing) ? 'not-allowed' : 'pointer',
+              }}
+            >
+              <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
+              {syncing ? <TranslatedText text="Syncing..." /> : <TranslatedText text="Market Sync" />}
+            </button>
+          </div>
         </form>
       </section>
+
+      {syncMessage && (
+        <div
+          className="glass-panel"
+          role="status"
+          style={{
+            padding: '16px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'rgba(16, 185, 129, 0.12)',
+            border: '1px solid rgba(16, 185, 129, 0.35)',
+            borderRadius: '12px',
+            color: '#34d399',
+            fontSize: '0.92rem',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <CheckCircle size={20} color="#10b981" style={{ flexShrink: 0 }} />
+            <span>{syncMessage}</span>
+          </div>
+          <button
+            onClick={() => setSyncMessage('')}
+            style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1rem' }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {loading && (
         <div className="glass-panel" role="status" style={{ padding: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <RefreshCw size={18} className="animate-spin" />
-          Loading market records…
+          <TranslatedText text="Loading market records…" />
         </div>
       )}
 
       {!loading && error && (
-        <div className="glass-panel" role="status" style={{ padding: '20px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-          <AlertCircle size={20} color="#f59e0b" style={{ flexShrink: 0 }} />
-          <div>
-            <strong><TranslatedText text="Market prices unavailable" /></strong>
-            <p style={{ color: '#94a3b8', marginTop: '6px' }}>{error}</p>
+        <div className="glass-panel" role="status" style={{ padding: '20px', display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+          <AlertCircle size={22} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ flex: 1 }}>
+            <strong style={{ fontSize: '1rem' }}><TranslatedText text="Market prices unavailable" /></strong>
+            <p style={{ color: '#94a3b8', marginTop: '6px', lineHeight: 1.5 }}>{error}</p>
+            {cropQuery.trim() && (
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleMarketSync}
+                disabled={syncing}
+                style={{
+                  marginTop: '14px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '10px 20px',
+                }}
+              >
+                <RefreshCw size={16} className={syncing ? 'animate-spin' : ''} />
+                {syncing
+                  ? <TranslatedText text="Syncing Today's Market Prices..." />
+                  : <TranslatedText text={`Sync Today's Mandi Prices for "${cropQuery.trim()}" to Database`} />}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -151,9 +266,36 @@ export default function MarketPricesPage({ activeBatch }) {
         <>
           <section className="glass-panel glow-border" style={{ padding: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '18px' }}>
             <div>
-              <span className="badge badge-verified">
-                <TrendingUp size={14} /> <TranslatedText text="Trend:" /> <TranslatedText text={(market.price_trend || 'unknown').toUpperCase()} />
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <span className="badge badge-verified">
+                  <TrendingUp size={14} /> <TranslatedText text="Trend:" /> <TranslatedText text={(market.price_trend || 'unknown').toUpperCase()} />
+                </span>
+                <span className={`badge ${market.freshness === 'live' ? 'badge-verified' : 'badge-info'}`}>
+                  {market.freshness === 'live' ? 'LIVE TODAY' : 'STORED MANDI FEED'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleMarketSync}
+                  disabled={syncing}
+                  className="btn-secondary"
+                  title="Sync today's latest APMC mandi prices"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 12px',
+                    fontSize: '0.82rem',
+                    background: 'rgba(255, 255, 255, 0.06)',
+                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                    borderRadius: '8px',
+                    color: '#cbd5e1',
+                    cursor: syncing ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
+                  <TranslatedText text={syncing ? 'Syncing…' : 'Sync Live Prices'} />
+                </button>
+              </div>
               <h2 style={{ fontSize: '2rem', marginTop: '10px', color: '#34d399' }}>
                 {market.average_modal_price == null
                   ? '—'

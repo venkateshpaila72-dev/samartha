@@ -181,7 +181,7 @@ export default function App() {
           )}
 
           {currentTab === 'profile' && (
-            <FarmerProfilePage />
+            <FarmerProfilePage onNavigate={setCurrentTab} />
           )}
 
           {currentTab === 'admin' && (

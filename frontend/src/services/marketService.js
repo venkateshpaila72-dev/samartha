@@ -35,4 +35,30 @@ export const marketService = {
     const response = await apiRequest(`/batches/${encodeURIComponent(batchId)}/market?${query}`);
     return response.data;
   },
+
+  async syncMarketPrices(crop, location = {}) {
+    const params = new URLSearchParams();
+    if (crop) params.set('crop', String(crop).trim());
+    if (location.state) params.set('state', String(location.state).trim());
+    if (location.district) params.set('district', String(location.district).trim());
+    const query = params.toString();
+    const endpoint = query ? `/market/sync?${query}` : '/market/sync';
+    const response = await apiRequest(endpoint, {
+      method: 'POST',
+    });
+    return response.data;
+  },
+
+  async syncBatchMarketPrices(batchId, location = {}) {
+    if (!batchId) throw new Error('Select a batch to sync its market prices.');
+    const params = new URLSearchParams();
+    if (location.state) params.set('state', String(location.state).trim());
+    if (location.district) params.set('district', String(location.district).trim());
+    const query = params.toString();
+    const endpoint = `/batches/${encodeURIComponent(batchId)}/market/sync${query ? `?${query}` : ''}`;
+    const response = await apiRequest(endpoint, {
+      method: 'POST',
+    });
+    return response.data;
+  },
 };

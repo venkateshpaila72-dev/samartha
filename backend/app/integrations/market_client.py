@@ -148,15 +148,41 @@ class MarketClient:
                 "", timestamp, "Select a crop to view market prices."
             )
         db = get_db()
+        records: list[dict] = []
+        is_broadened = False
         if db is None:
-            return cls._unavailable(
-                crop,
-                timestamp,
-                "No stored market-price records can be queried because market-price storage is unavailable. Please try again later.",
-            )
+            from app.core.config import settings
+            if settings.APP_ENV == "test":
+                from app.integrations.market_ingestion_client import _IN_MEMORY_MARKET_PRICES
+                clean_crop = crop.lower()
+                records = [
+                    r for r in _IN_MEMORY_MARKET_PRICES.values()
+                    if clean_crop in r.get("crop_name", "").lower()
+                    or clean_crop in r.get("commodity", "").lower()
+                ]
+                if not records:
+                    return cls._unavailable(
+                        crop,
+                        timestamp,
+                        f"No stored market-price records found for {crop}. Click 'Market Sync' to load today's mandi prices to the database.",
+                    )
+                records.sort(key=lambda r: r.get("price_date", "") or r.get("arrival_date", ""), reverse=True)
+            else:
+                return cls._unavailable(
+                    crop,
+                    timestamp,
+                    "No stored market-price records can be queried because market-price storage is unavailable. Please try again later.",
+                )
 
-        crop_pattern = {"$regex": f"^{re.escape(crop)}$", "$options": "i"}
-        query: dict[str, Any] = {
+        # Flexible token matching for crops like "Paddy (Rice)", "Wheat", "Tomato", etc.
+        tokens = [re.escape(crop)]
+        for part in re.split(r"[\(\)/]+", crop):
+            clean_part = part.strip()
+            if clean_part and len(clean_part) >= 3 and clean_part.lower() != crop.lower():
+                tokens.append(re.escape(clean_part))
+        crop_pattern = {"$regex": f"({'|'.join(tokens)})", "$options": "i"}
+
+        base_crop_query: dict[str, Any] = {
             "$or": [
                 {"crop_name": crop_pattern},
                 {"crop": crop_pattern},
@@ -164,6 +190,8 @@ class MarketClient:
                 {"commodity_name": crop_pattern},
             ]
         }
+
+        query: dict[str, Any] = dict(base_crop_query)
         if state and state.strip():
             query["state"] = {
                 "$regex": f"^{re.escape(state.strip())}$",
@@ -175,26 +203,24 @@ class MarketClient:
                 "$options": "i",
             }
 
-        try:
-            collection = db[MARKET_PRICES_COLLECTION]
-            records = list(
-                collection.find(query, {"_id": 0})
-                .sort(
-                    [
-                        ("price_date", -1),
-                        ("arrival_date", -1),
-                        ("date", -1),
-                    ]
+        if db is not None:
+            try:
+                collection = db[MARKET_PRICES_COLLECTION]
+                sort_keys = [("price_date", -1), ("arrival_date", -1), ("date", -1)]
+                records = list(collection.find(query, {"_id": 0}).sort(sort_keys).limit(5000))
+
+                # If filtered by state/district but returned 0 records, fall back to broader crop query
+                if not records and (state or district):
+                    records = list(collection.find(base_crop_query, {"_id": 0}).sort(sort_keys).limit(5000))
+                    if records:
+                        is_broadened = True
+            except Exception:
+                logger.exception("Failed querying stored market prices")
+                return cls._unavailable(
+                    crop,
+                    timestamp,
+                    "Could not read market-price records from the database.",
                 )
-                .limit(5000)
-            )
-        except Exception:
-            logger.exception("Failed querying stored market prices")
-            return cls._unavailable(
-                crop,
-                timestamp,
-                "Could not read market-price records from the database.",
-            )
 
         valid: list[tuple[dict, float]] = []
         daily: dict[datetime.date, list[float]] = defaultdict(list)
@@ -221,7 +247,7 @@ class MarketClient:
             return cls._unavailable(
                 crop,
                 timestamp,
-                message + ". Import actual mandi records and try again.",
+                message + ". Click 'Market Sync' to load today's mandi prices to the database.",
             )
 
         # Daily averages combine available market observations; no missing dates are fabricated.
@@ -306,6 +332,16 @@ class MarketClient:
             else None
         )
         latest_date = historical[-1].date if historical else "unknown"
+        today_iso = datetime.date.today().isoformat()
+        is_today = latest_date == today_iso
+        feed_label = " (Today's Live Feed)" if is_today else ""
+        rec = (
+            f"Showing stored mandi observations for {crop}. Latest arrival date: {latest_date}{feed_label}. "
+            "Compare modal and minimum prices across mandis to decide the best selling window."
+        )
+        if is_broadened and state:
+            rec += f" (Displaying regional/national APMC mandis; no specific local records reported for {state})."
+
         return MarketPriceReportOut(
             crop_name=crop,
             latest_prices=items,
@@ -314,12 +350,9 @@ class MarketClient:
             forecast_note=forecast_note,
             average_modal_price=average,
             price_trend=trend,
-            recommendation=(
-                f"Showing stored mandi observations for {crop}. Latest dated history: {latest_date}. "
-                "Compare the market and report date before deciding when to sell."
-            ),
+            recommendation=rec,
             retrieval_timestamp=timestamp,
-            freshness="cached",
+            freshness="live" if is_today else "cached",
         )
 
     @staticmethod

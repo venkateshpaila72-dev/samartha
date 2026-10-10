@@ -73,6 +73,20 @@ export function AuthProvider({ children }) {
     return response.data.user;
   };
 
+  const updateUser = (patch) => {
+    setUser((prev) => (prev ? { ...prev, ...patch } : prev));
+  };
+
+  const refreshUser = async () => {
+    try {
+      const response = await apiRequest('/auth/me');
+      setUser(response.data);
+      return response.data;
+    } catch {
+      return null;
+    }
+  };
+
   const logout = () => {
     localStorage.removeItem('farmshield_token');
     setUser(null);
@@ -86,6 +100,8 @@ export function AuthProvider({ children }) {
         login,
         register,
         logout,
+        updateUser,
+        refreshUser,
       }}
     >
       {children}

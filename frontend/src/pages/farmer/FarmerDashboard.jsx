@@ -20,6 +20,7 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
   const [weather, setWeather] = useState(null);
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [marketSyncing, setMarketSyncing] = useState(false);
 
   const fetchDashboardData = async () => {
     if (!activeBatch) return;
@@ -37,6 +38,24 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
       console.error('Error loading dashboard data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncMarket = async () => {
+    if (!activeBatch?.batch_id || marketSyncing) return;
+    setMarketSyncing(true);
+    try {
+      const res = await marketService.syncBatchMarketPrices(activeBatch.batch_id);
+      if (res?.report) {
+        setMarket(res.report);
+      } else {
+        const fresh = await marketService.getBatchMarketPrices(activeBatch.batch_id);
+        setMarket(fresh);
+      }
+    } catch (err) {
+      console.warn('Batch market sync failed:', err);
+    } finally {
+      setMarketSyncing(false);
     }
   };
 
@@ -292,14 +311,37 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
               <TrendingUp size={20} color="#34d399" />
               <h3 style={{ fontSize: '1.15rem' }}>APMC Mandi Market Prices</h3>
             </div>
-            <span className="badge badge-verified">{market?.price_trend?.toUpperCase() || 'STABLE'}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="badge badge-verified">{market?.price_trend?.toUpperCase() || 'STABLE'}</span>
+              <button
+                type="button"
+                onClick={handleSyncMarket}
+                disabled={marketSyncing}
+                title="Sync today's mandi market prices for this crop"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  borderRadius: '6px',
+                  padding: '4px 8px',
+                  color: '#34d399',
+                  cursor: marketSyncing ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  fontSize: '0.78rem',
+                }}
+              >
+                <RefreshCw size={12} className={marketSyncing ? 'animate-spin' : ''} />
+                {marketSyncing ? 'Syncing…' : 'Sync'}
+              </button>
+            </div>
           </div>
 
           {market ? (
             <div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '12px' }}>
                 <span style={{ fontSize: '1.8rem', fontWeight: '800', color: '#34d399' }}>
-                  ₹{market.average_modal_price?.toLocaleString()}
+                  {market.average_modal_price != null ? `₹${Number(market.average_modal_price).toLocaleString('en-IN')}` : '—'}
                 </span>
                 <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>/ Quintal (Average Modal)</span>
               </div>

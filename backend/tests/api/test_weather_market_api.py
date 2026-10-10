@@ -47,5 +47,33 @@ class TestWeatherMarketAPI(unittest.TestCase):
         self.assertIn("भंडारण सलाह", data["translated_text"])
 
 
+    def test_05_farmer_market_sync_loads_today_records_to_database(self):
+        # 1. Sync market prices for Onion
+        res = test_client.post(
+            "/api/v1/market/sync?crop=Onion&state=Maharashtra",
+            headers=self.headers,
+        )
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertTrue(body["success"])
+        data = body["data"]
+        self.assertIn("sync_result", data)
+        self.assertGreater(data["sync_result"]["records_inserted_or_updated"], 0)
+
+        # 2. Query market prices for Onion now that it is synced
+        res_prices = test_client.get(
+            "/api/v1/market/prices?crop=Onion&state=Maharashtra",
+            headers=self.headers,
+        )
+        self.assertEqual(res_prices.status_code, 200)
+        price_data = res_prices.json()["data"]
+        self.assertEqual(price_data["crop_name"], "Onion")
+        self.assertGreater(len(price_data["latest_prices"]), 0)
+        self.assertIsNotNone(price_data["average_modal_price"])
+        self.assertGreater(price_data["average_modal_price"], 0)
+        self.assertIn(price_data["freshness"], ["live", "cached"])
+        self.assertEqual(len(price_data["forecast_prices"]), 7)
+
+
 if __name__ == "__main__":
     unittest.main()

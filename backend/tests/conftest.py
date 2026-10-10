@@ -78,6 +78,8 @@ def get_auth_headers(
         "password": "Password123!",
         "full_name": "Test Farmer",
         "preferred_language": "en",
+        "state": "Maharashtra",
+        "district": "Nashik",
     }
 
     response = test_client.post(
