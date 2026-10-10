@@ -20,7 +20,7 @@ const UI_TRANSLATIONS = {
   en: {
     dashboard: 'Farmer Dashboard', my_batches: 'Storage Batches', monitoring: 'Live Monitoring',
     diary: 'Crop Diary', ai_assistant: 'AI Advisor', alerts: 'Storage Alerts',
-    weather: 'Weather Forecast', market: 'Mandi Prices', traditional: 'Traditional Guidance',
+    weather: 'Weather Forecast', market: 'Mandi Prices', profile: 'Farmer Profile', traditional: 'Traditional Guidance',
     admin: 'Admin Portal', onboarding: 'Crop Onboarding', navigation: 'Navigation',
     system_admin: 'System Admin', admin_management: 'Admin Management',
     temperature: 'Temperature', humidity: 'Relative Humidity', safe_range: 'Safe Range',
@@ -30,7 +30,7 @@ const UI_TRANSLATIONS = {
   hi: {
     dashboard: 'किसान डैशबोर्ड', my_batches: 'भंडारण बैच', monitoring: 'लाइव निगरानी',
     diary: 'फसल डायरी', ai_assistant: 'एआई सलाहकार', alerts: 'भंडारण अलर्ट',
-    weather: 'मौसम पूर्वानुमान', market: 'मंडी भाव', traditional: 'पारंपरिक मार्गदर्शन',
+    weather: 'मौसम पूर्वानुमान', market: 'मंडी भाव', profile: 'किसान प्रोफ़ाइल', traditional: 'पारंपरिक मार्गदर्शन',
     admin: 'प्रशासन पोर्टल', onboarding: 'फसल पंजीकरण', navigation: 'नेविगेशन',
     system_admin: 'सिस्टम व्यवस्थापक', admin_management: 'व्यवस्थापक प्रबंधन',
     temperature: 'तापमान', humidity: 'सापेक्ष आर्द्रता', safe_range: 'सुरक्षित सीमा',
@@ -40,7 +40,7 @@ const UI_TRANSLATIONS = {
   te: {
     dashboard: 'రైతు డాష్‌బోర్డ్', my_batches: 'నిల్వ బ్యాచ్‌లు', monitoring: 'ప్రత్యక్ష పర్యవేక్షణ',
     diary: 'పంట డైరీ', ai_assistant: 'ఏఐ సలహాదారు', alerts: 'నిల్వ హెచ్చరికలు',
-    weather: 'వాతావరణ సూచన', market: 'మార్కెట్ ధరలు', traditional: 'సాంప్రదాయ మార్గదర్శకం',
+    weather: 'వాతావరణ సూచన', market: 'మార్కెట్ ధరలు', profile: 'రైతు ప్రొఫైల్', traditional: 'సాంప్రదాయ మార్గదర్శకం',
     admin: 'అడ్మిన్ పోర్టల్', onboarding: 'పంట నమోదు', navigation: 'నావిగేషన్',
     system_admin: 'సిస్టమ్ అడ్మిన్', admin_management: 'అడ్మిన్ నిర్వహణ',
     temperature: 'ఉష్ణోగ్రత', humidity: 'సాపేక్ష ఆర్ద్రత', safe_range: 'సురక్షిత పరిధి',
@@ -50,7 +50,7 @@ const UI_TRANSLATIONS = {
   ta: {
     dashboard: 'விவசாயி டாஷ்போர்டு', my_batches: 'சேமிப்பு தொகுதிகள்', monitoring: 'நேரடி கண்காணிப்பு',
     diary: 'பயிர் நாட்குறிப்பு', ai_assistant: 'AI ஆலோசகர்', alerts: 'சேமிப்பு எச்சரிக்கைகள்',
-    weather: 'வானிலை முன்னறிவிப்பு', market: 'சந்தை விலைகள்', traditional: 'பாரம்பரிய வழிகாட்டுதல்',
+    weather: 'வானிலை முன்னறிவிப்பு', market: 'சந்தை விலைகள்', profile: 'விவசாயி சுயவிவரம்', traditional: 'பாரம்பரிய வழிகாட்டுதல்',
     admin: 'நிர்வாக போர்டல்', onboarding: 'பயிர் பதிவு', navigation: 'வழிசெலுத்தல்',
     system_admin: 'கணினி நிர்வாகி', admin_management: 'நிர்வாக மேலாண்மை',
     temperature: 'வெப்பநிலை', humidity: 'ஒப்பீட்டு ஈரப்பதம்', safe_range: 'பாதுகாப்பான வரம்பு',
@@ -60,7 +60,7 @@ const UI_TRANSLATIONS = {
   kn: {
     dashboard: 'ರೈತರ ಡ್ಯಾಶ್‌ಬೋರ್ಡ್', my_batches: 'ಸಂಗ್ರಹಣೆ ಬ್ಯಾಚ್‌ಗಳು', monitoring: 'ನೇರ ಮೇಲ್ವಿಚಾರಣೆ',
     diary: 'ಬೆಳೆ ದಿನಚರಿ', ai_assistant: 'AI ಸಲಹೆಗಾರ', alerts: 'ಸಂಗ್ರಹಣೆ ಎಚ್ಚರಿಕೆಗಳು',
-    weather: 'ಹವಾಮಾನ ಮುನ್ಸೂಚನೆ', market: 'ಮಾರುಕಟ್ಟೆ ಬೆಲೆಗಳು', traditional: 'ಸಾಂಪ್ರದಾಯಿಕ ಮಾರ್ಗದರ್ಶನ',
+    weather: 'ಹವಾಮಾನ ಮುನ್ಸೂಚನೆ', market: 'ಮಾರುಕಟ್ಟೆ ಬೆಲೆಗಳು', profile: 'ರೈತರ ಪ್ರೊಫೈಲ್', traditional: 'ಸಾಂಪ್ರದಾಯಿಕ ಮಾರ್ಗದರ್ಶನ',
     admin: 'ನಿರ್ವಾಹಕ ಪೋರ್ಟಲ್', onboarding: 'ಬೆಳೆ ನೋಂದಣಿ', navigation: 'ನ್ಯಾವಿಗೇಶನ್',
     system_admin: 'ಸಿಸ್ಟಮ್ ನಿರ್ವಾಹಕ', admin_management: 'ನಿರ್ವಾಹಕ ನಿರ್ವಹಣೆ',
     temperature: 'ತಾಪಮಾನ', humidity: 'ಸಾಪೇಕ್ಷ ಆರ್ದ್ರತೆ', safe_range: 'ಸುರಕ್ಷಿತ ವ್ಯಾಪ್ತಿ',
@@ -70,7 +70,7 @@ const UI_TRANSLATIONS = {
   mr: {
     dashboard: 'शेतकरी डॅशबोर्ड', my_batches: 'साठवण बॅच', monitoring: 'थेट निरीक्षण',
     diary: 'पीक डायरी', ai_assistant: 'एआय सल्लागार', alerts: 'साठवण सूचना',
-    weather: 'हवामान अंदाज', market: 'बाजारभाव', traditional: 'पारंपरिक मार्गदर्शन',
+    weather: 'हवामान अंदाज', market: 'बाजारभाव', profile: 'शेतकरी प्रोफाइल', traditional: 'पारंपरिक मार्गदर्शन',
     admin: 'प्रशासक पोर्टल', onboarding: 'पीक नोंदणी', navigation: 'नेव्हिगेशन',
     system_admin: 'सिस्टम प्रशासक', admin_management: 'प्रशासक व्यवस्थापन',
     temperature: 'तापमान', humidity: 'सापेक्ष आर्द्रता', safe_range: 'सुरक्षित मर्यादा',
@@ -80,7 +80,7 @@ const UI_TRANSLATIONS = {
   pa: {
     dashboard: 'ਕਿਸਾਨ ਡੈਸ਼ਬੋਰਡ', my_batches: 'ਸਟੋਰੇਜ ਬੈਚ', monitoring: 'ਲਾਈਵ ਨਿਗਰਾਨੀ',
     diary: 'ਫਸਲ ਡਾਇਰੀ', ai_assistant: 'AI ਸਲਾਹਕਾਰ', alerts: 'ਸਟੋਰੇਜ ਚੇਤਾਵਨੀਆਂ',
-    weather: 'ਮੌਸਮ ਦੀ ਭਵਿੱਖਬਾਣੀ', market: 'ਮੰਡੀ ਭਾਅ', traditional: 'ਰਵਾਇਤੀ ਮਾਰਗਦਰਸ਼ਨ',
+    weather: 'ਮੌਸਮ ਦੀ ਭਵਿੱਖਬਾਣੀ', market: 'ਮੰਡੀ ਭਾਅ', profile: 'ਕਿਸਾਨ ਪ੍ਰੋਫ਼ਾਈਲ', traditional: 'ਰਵਾਇਤੀ ਮਾਰਗਦਰਸ਼ਨ',
     admin: 'ਐਡਮਿਨ ਪੋਰਟਲ', onboarding: 'ਫਸਲ ਰਜਿਸਟ੍ਰੇਸ਼ਨ', navigation: 'ਨੇਵੀਗੇਸ਼ਨ',
     system_admin: 'ਸਿਸਟਮ ਐਡਮਿਨ', admin_management: 'ਐਡਮਿਨ ਪ੍ਰਬੰਧਨ',
     temperature: 'ਤਾਪਮਾਨ', humidity: 'ਸਾਪੇਖ ਨਮੀ', safe_range: 'ਸੁਰੱਖਿਅਤ ਹੱਦ',
@@ -90,7 +90,7 @@ const UI_TRANSLATIONS = {
   bn: {
     dashboard: 'কৃষক ড্যাশবোর্ড', my_batches: 'সংরক্ষণ ব্যাচ', monitoring: 'লাইভ পর্যবেক্ষণ',
     diary: 'ফসলের ডায়েরি', ai_assistant: 'এআই উপদেষ্টা', alerts: 'সংরক্ষণ সতর্কতা',
-    weather: 'আবহাওয়ার পূর্বাভাস', market: 'বাজারদর', traditional: 'ঐতিহ্যবাহী নির্দেশনা',
+    weather: 'আবহাওয়ার পূর্বাভাস', market: 'বাজারদর', profile: 'কৃষক প্রোফাইল', traditional: 'ঐতিহ্যবাহী নির্দেশনা',
     admin: 'অ্যাডমিন পোর্টাল', onboarding: 'ফসল নিবন্ধন', navigation: 'নেভিগেশন',
     system_admin: 'সিস্টেম অ্যাডমিন', admin_management: 'অ্যাডমিন ব্যবস্থাপনা',
     temperature: 'তাপমাত্রা', humidity: 'আপেক্ষিক আর্দ্রতা', safe_range: 'নিরাপদ সীমা',
