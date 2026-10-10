@@ -1,6 +1,8 @@
 """Agricultural Market Price Endpoints."""
 
 from typing import Optional
+import datetime
+import logging
 import hmac
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
@@ -10,6 +12,9 @@ from app.services.farmshield_agent import FarmShieldAgent
 from app.repositories.crop_repository import CropRepository
 from app.schemas.common import APIResponse
 from app.schemas.market import MarketPriceReportOut
+from app.core.config import settings
+from app.integrations.market_ingestion_client import sync_market_prices
+from app.db.mongo import get_db
 from app.core.config import settings
 from app.integrations.market_ingestion_client import sync_market_prices
 
@@ -106,3 +111,48 @@ async def sync_market_data(
             detail="Market provider ingestion failed. Check backend logs for the provider error.",
         ) from exc
     return {"success": True, "message": "Market-data ingestion completed.", "data": result}
+
+
+@router.post("/market/sync-now")
+async def farmer_sync_market_prices(
+    crop: str = Query(..., min_length=1, max_length=100),
+    state: str = Query(..., min_length=1, max_length=100),
+    district: Optional[str] = Query(None, max_length=100),
+    current_user: dict = Depends(get_current_user),
+):
+    """Authenticated, bounded manual sync for the farmer's selected market."""
+    crop = crop.strip()
+    state = state.strip()
+    district = district.strip() if district else None
+    if not crop or not state:
+        raise HTTPException(status_code=422, detail="Select a crop and state before syncing.")
+    if not settings.MARKET_API_KEY.strip():
+        raise HTTPException(status_code=503, detail="Market data sync is not configured on the server.")
+    db = get_db()
+    if db is None:
+        raise HTTPException(status_code=503, detail="Market database is unavailable.")
+    now = datetime.datetime.now(datetime.timezone.utc)
+    requests = db["market_sync_requests"]
+    key = {"user_id": current_user["id"]}
+    previous = requests.find_one(key, {"requested_at": 1})
+    if previous and previous.get("requested_at"):
+        try:
+            then = previous["requested_at"]
+            if isinstance(then, str):
+                then = datetime.datetime.fromisoformat(then.replace("Z", "+00:00"))
+            if then.tzinfo is None:
+                then = then.replace(tzinfo=datetime.timezone.utc)
+            wait = 900 - int((now - then).total_seconds())
+            if wait > 0:
+                raise HTTPException(status_code=429, detail=f"Try again in about {wait // 60 + 1} minute(s).", headers={"Retry-After": str(wait)})
+        except ValueError:
+            pass
+    try:
+        result = await sync_market_prices(crop=crop, state=state, district=district, max_pages=2, page_size=500)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:
+        logging.getLogger(__name__).error("Manual market sync failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=502, detail="The market provider could not complete this sync. Please retry later.") from exc
+    requests.update_one(key, {"$set": {"requested_at": now.isoformat(), "crop": crop, "state": state, "district": district}}, upsert=True)
+    return {"success": True, "message": "Market sync completed.", "data": result}
