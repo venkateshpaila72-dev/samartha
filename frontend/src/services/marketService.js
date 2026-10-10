@@ -25,6 +25,15 @@ export const marketService = {
     return response.data;
   },
 
+  async syncMarketPrices({ crop, state, district } = {}) {
+    if (!crop || !String(crop).trim()) throw new Error('Select a crop before syncing market prices.');
+    const params = new URLSearchParams({ crop: String(crop).trim() });
+    if (state?.trim()) params.set('state', state.trim());
+    if (district?.trim()) params.set('district', district.trim());
+    const response = await apiRequest(`/market/sync-now?${params.toString()}`, { method: 'POST' });
+    return response.data;
+  },
+
   async getBatchMarketPrices(batchId, location = {}, pagination = {}) {
     if (!batchId) throw new Error('Select a batch to view its market prices.');
     const query = buildQuery({
