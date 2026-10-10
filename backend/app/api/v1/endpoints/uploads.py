@@ -59,7 +59,9 @@ async def upload_image(
             detail=f"Invalid file type: {file.content_type}. Only JPEG, PNG, and WebP images are supported.",
         )
 
-    file_bytes = await file.read()
+    # Read at most one byte beyond the limit so oversized uploads are rejected without
+    # buffering an arbitrarily large request body in application memory.
+    file_bytes = await file.read(MAX_FILE_SIZE + 1)
     if not file_bytes:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
