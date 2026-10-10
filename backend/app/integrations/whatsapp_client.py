@@ -1,11 +1,12 @@
-"""WhatsApp Notification Client for FarmShield.
-Sends alert notifications via WhatsApp Business API and maintains delivery logs.
+"""WhatsApp Notification Client for FarmShield using Twilio.
+Sends alert notifications via Twilio WhatsApp API and maintains delivery logs.
 """
 
+import asyncio
 import datetime
 import logging
 import uuid
-import httpx
+from typing import Optional
 
 from app.core.config import settings
 from app.db.collection_names import NOTIFICATION_LOGS_COLLECTION
@@ -16,6 +17,15 @@ _IN_MEMORY_NOTIF_LOGS: list[dict] = []
 
 
 class WhatsAppClient:
+    """Twilio WhatsApp client for dispatching critical storage alerts."""
+
+    @classmethod
+    def is_configured(cls) -> bool:
+        sid = settings.TWILIO_ACCOUNT_SID.strip()
+        token = settings.TWILIO_AUTH_TOKEN.strip()
+        sender = settings.TWILIO_WHATSAPP_FROM.strip()
+        return bool(sid and token and sender and not sid.startswith("your_"))
+
     @classmethod
     async def send_alert_notification(
         cls,
@@ -29,8 +39,6 @@ class WhatsAppClient:
     ) -> bool:
         now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
         log_id = f"notif_{uuid.uuid4().hex[:10]}"
-        api_token = settings.WHATSAPP_API_TOKEN.strip()
-        phone_id = settings.WHATSAPP_PHONE_NUMBER_ID.strip()
 
         message_body = (
             f"🌾 *FARMSHIELD ALERT* 🌾\n\n"
@@ -41,32 +49,40 @@ class WhatsAppClient:
             f"Check your FarmShield Dashboard for live updates."
         )
 
-        status = "simulated_success"
+        status = "pending_whatsapp_credentials"
         err_msg = None
+        sid_or_id = None
 
-        if api_token and phone_id and not api_token.startswith("your_"):
+        if cls.is_configured():
             try:
-                url = f"https://graph.facebook.com/v19.0/{phone_id}/messages"
-                headers = {
-                    "Authorization": f"Bearer {api_token}",
-                    "Content-Type": "application/json",
-                }
-                payload = {
-                    "messaging_product": "whatsapp",
-                    "to": phone_number,
-                    "type": "text",
-                    "text": {"body": message_body},
-                }
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.post(url, headers=headers, json=payload)
-                    if resp.status_code in [200, 201]:
-                        status = "delivered"
-                    else:
-                        status = "provider_error"
-                        err_msg = f"HTTP {resp.status_code}: {resp.text}"
+                from twilio.rest import Client
+
+                account_sid = settings.TWILIO_ACCOUNT_SID.strip()
+                auth_token = settings.TWILIO_AUTH_TOKEN.strip()
+                from_num = settings.TWILIO_WHATSAPP_FROM.strip()
+                if not from_num.startswith("whatsapp:"):
+                    from_num = f"whatsapp:{from_num}"
+
+                to_num = phone_number.strip()
+                if not to_num.startswith("whatsapp:"):
+                    to_num = f"whatsapp:{to_num}"
+
+                def _send_sync():
+                    client = Client(account_sid, auth_token)
+                    msg = client.messages.create(
+                        body=message_body,
+                        from_=from_num,
+                        to=to_num,
+                    )
+                    return msg.sid, msg.status
+
+                msg_sid, msg_status = await asyncio.to_thread(_send_sync)
+                sid_or_id = msg_sid
+                status = "delivered" if msg_status in ["queued", "sent", "delivered", "accepted"] else msg_status
             except Exception as e:
-                status = "failed"
+                status = "provider_error"
                 err_msg = str(e)
+                logger.error(f"Twilio WhatsApp notification failed: {e}")
         else:
             status = "pending_whatsapp_credentials"
 
@@ -74,7 +90,8 @@ class WhatsAppClient:
             "log_id": log_id,
             "batch_id": batch_id,
             "recipient_masked": phone_number[:4] + "****" if len(phone_number) > 4 else "unknown",
-            "provider": settings.WHATSAPP_PROVIDER,
+            "provider": "Twilio",
+            "message_sid": sid_or_id,
             "status": status,
             "error": err_msg,
             "created_at": now_iso,
@@ -83,7 +100,11 @@ class WhatsAppClient:
         _IN_MEMORY_NOTIF_LOGS.append(log_doc.copy())
         db = get_db()
         if db is not None:
-            db[NOTIFICATION_LOGS_COLLECTION].insert_one(log_doc.copy())
+            try:
+                db[NOTIFICATION_LOGS_COLLECTION].insert_one(log_doc.copy())
+            except Exception as db_err:
+                logger.warning(f"Could not persist notification log: {db_err}")
 
-        logger.info(f"WhatsApp alert log recorded: status={status} for batch={batch_id}")
-        return status in ["delivered", "simulated_success", "pending_whatsapp_credentials"]
+        logger.info(f"Twilio WhatsApp alert log recorded: status={status} for batch={batch_id}")
+        return status in ["delivered", "queued", "sent", "simulated_success", "pending_whatsapp_credentials"]
+

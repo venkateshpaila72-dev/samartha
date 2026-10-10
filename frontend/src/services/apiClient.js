@@ -8,8 +8,9 @@ export async function apiRequest(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
   const token = localStorage.getItem('farmshield_token');
 
+  const isFormData = options.body instanceof FormData;
   const headers = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   };

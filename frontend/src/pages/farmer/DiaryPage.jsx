@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { diaryService } from '../../services/monitoringService';
+import { uploadImage } from '../../services/uploadService';
 import {
   BookOpen,
   PlusCircle,
@@ -9,6 +10,7 @@ import {
   Calendar,
   AlertCircle,
   CheckCircle,
+  UploadCloud,
 } from 'lucide-react';
 
 export default function DiaryPage({ activeBatch }) {
@@ -17,6 +19,8 @@ export default function DiaryPage({ activeBatch }) {
   const [category, setCategory] = useState('general_inspection');
   const [severity, setSeverity] = useState('normal');
   const [photoUrl, setPhotoUrl] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -75,6 +79,24 @@ export default function DiaryPage({ activeBatch }) {
     setText('Voice Memo: Inspected bottom sacks in center stack. Grain feels dry, no musty odor detected, but saw 2 small beetles near the north wall corner.');
     setCategory('insect_activity');
     setSeverity('minor_concern');
+  };
+
+  const handlePhotoUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingPhoto(true);
+    setUploadSuccess(false);
+    try {
+      const data = await uploadImage(file, 'farmshield/diary');
+      const url = data.secure_url || data.url;
+      setPhotoUrl(url);
+      setUploadSuccess(true);
+    } catch (err) {
+      alert(`Photo upload failed: ${err.message || 'Check network / Cloudinary configuration'}`);
+    } finally {
+      setUploadingPhoto(false);
+    }
   };
 
   if (!activeBatch) {
@@ -154,14 +176,90 @@ export default function DiaryPage({ activeBatch }) {
             </div>
 
             <div>
-              <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Inspection Photo URL (Optional)</label>
-              <input
-                type="text"
-                className="input-field"
-                placeholder="https://example.com/storage-inspection.jpg"
-                value={photoUrl}
-                onChange={(e) => setPhotoUrl(e.target.value)}
-              />
+              <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '6px' }}>
+                Storage Inspection Photo (Cloudinary Upload)
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <label
+                    htmlFor="diary-photo-input"
+                    className="btn-secondary"
+                    style={{
+                      cursor: uploadingPhoto ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.85rem',
+                      padding: '8px 14px',
+                    }}
+                  >
+                    <Camera size={16} color="#38bdf8" />
+                    {uploadingPhoto ? 'Uploading to Cloudinary...' : 'Upload Photo'}
+                  </label>
+                  <input
+                    id="diary-photo-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoUpload}
+                    disabled={uploadingPhoto}
+                    style={{ display: 'none' }}
+                  />
+                  {uploadSuccess && (
+                    <span style={{ fontSize: '0.8rem', color: '#4ade80', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle size={14} /> Uploaded to Cloudinary
+                    </span>
+                  )}
+                </div>
+
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Or paste image URL (https://...)"
+                  value={photoUrl}
+                  onChange={(e) => {
+                    setPhotoUrl(e.target.value);
+                    setUploadSuccess(false);
+                  }}
+                  style={{ fontSize: '0.85rem' }}
+                />
+
+                {photoUrl && (
+                  <div style={{ position: 'relative', width: 'fit-content', marginTop: '4px' }}>
+                    <img
+                      src={photoUrl}
+                      alt="Inspection preview"
+                      style={{
+                        width: '90px',
+                        height: '90px',
+                        objectFit: 'cover',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(56, 189, 248, 0.4)',
+                      }}
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setPhotoUrl(''); setUploadSuccess(false); }}
+                      style={{
+                        position: 'absolute',
+                        top: '-6px',
+                        right: '-6px',
+                        background: '#ef4444',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '50%',
+                        width: '20px',
+                        height: '20px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        lineHeight: '1',
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <button type="submit" disabled={submitting} className="btn-primary" style={{ justifyContent: 'center' }}>

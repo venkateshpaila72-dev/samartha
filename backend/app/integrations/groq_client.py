@@ -34,20 +34,30 @@ class GroqClient:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Context: {context_data}\n\nFarmer Question: {user_message}"},
                 ]
-                payload = {
-                    "model": settings.GROQ_MODEL,
-                    "messages": messages,
-                    "temperature": 0.3,
-                    "max_tokens": 1024,
-                }
+                models_to_try = [settings.GROQ_MODEL]
+                for fb in ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "openai/gpt-oss-20b"]:
+                    if fb not in models_to_try:
+                        models_to_try.append(fb)
+
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.post(cls.API_URL, headers=headers, json=payload)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        content = data["choices"][0]["message"]["content"]
-                        return content, True
-                    else:
-                        logger.warning(f"Groq API returned status {resp.status_code}: {resp.text}")
+                    for model_name in models_to_try:
+                        payload = {
+                            "model": model_name,
+                            "messages": messages,
+                            "temperature": 0.3,
+                            "max_tokens": 1024,
+                        }
+                        resp = await client.post(cls.API_URL, headers=headers, json=payload)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            content = data["choices"][0]["message"]["content"]
+                            return content, True
+                        elif resp.status_code == 404:
+                            logger.info(f"Model '{model_name}' not available on Groq, trying next candidate...")
+                            continue
+                        else:
+                            logger.warning(f"Groq API returned status {resp.status_code}: {resp.text}")
+                            break
             except Exception as e:
                 logger.error(f"Error calling Groq API: {e}")
 

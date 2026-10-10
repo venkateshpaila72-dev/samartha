@@ -24,7 +24,9 @@ class MongoDBManager:
         if not cls._checked:
             cls._checked = True
             try:
-                logger.info(f"Connecting to MongoDB at {settings.MONGODB_URI}...")
+                import re
+                safe_uri = re.sub(r'://([^:]+):([^@]+)@', r'://\1:****@', settings.MONGODB_URI)
+                logger.info(f"Connecting to MongoDB at {safe_uri}...")
                 client = MongoClient(
                     settings.MONGODB_URI,
                     serverSelectionTimeoutMS=1000,

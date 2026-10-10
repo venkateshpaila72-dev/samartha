@@ -34,34 +34,45 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
 
-    # RAG & Traditional Knowledge
-    RAG_PROVIDER: str = "in_memory_vector"
+    # RAG & Traditional Knowledge (Pinecone / Local vector)
+    PINECONE_API_KEY: str = ""
+    PINECONE_ENVIRONMENT: str = "us-east-1"
+    PINECONE_INDEX_NAME: str = "sar"
+    RAG_PROVIDER: str = "pinecone"
     RAG_COLLECTION: str = "traditional_knowledge"
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     # Microsoft Azure
     AZURE_TRANSLATOR_KEY: str = ""
     AZURE_TRANSLATOR_ENDPOINT: str = "https://api.cognitive.microsofttranslator.com"
-    AZURE_TRANSLATOR_REGION: str = "eastus"
+    AZURE_TRANSLATOR_REGION: str = "eastasia"
     AZURE_SPEECH_KEY: str = ""
-    AZURE_SPEECH_REGION: str = "eastus"
+    AZURE_SPEECH_REGION: str = "eastasia"
 
-    # Weather API
+    # Weather API (Open-Meteo)
+    OPEN_METEO_BASE_URL: str = "https://api.open-meteo.com/v1/forecast"
     WEATHER_API_KEY: str = ""
     WEATHER_API_BASE_URL: str = "https://api.openweathermap.org/data/2.5"
 
-    # Market API
+    # Market API (AGMARKNET)
+    AGMARKNET_BASE_URL: str = "https://api.agmarknet.gov.in/v1"
     MARKET_API_KEY: str = ""
     MARKET_API_BASE_URL: str = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
 
-    # WhatsApp Provider
-    WHATSAPP_PROVIDER: str = "meta"
+    # WhatsApp Provider (Twilio)
+    WHATSAPP_PROVIDER: str = "twilio"
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
     WHATSAPP_API_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = ""
 
-    # Storage
-    STORAGE_PROVIDER: str = "local"
+    # File & Image Storage (Cloudinary)
+    STORAGE_PROVIDER: str = "cloudinary"
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
     STORAGE_UPLOAD_DIR: str = "./uploads"
 
     @field_validator("CORS_ORIGINS", mode="before")

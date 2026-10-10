@@ -15,6 +15,7 @@ from app.api.v1.endpoints import (
     speech,
     storage_batches,
     translation,
+    uploads,
     weather,
 )
 
@@ -32,5 +33,6 @@ api_router.include_router(weather.router)
 api_router.include_router(market.router)
 api_router.include_router(translation.router)
 api_router.include_router(speech.router)
+api_router.include_router(uploads.router)
 api_router.include_router(admin.router)
 api_router.include_router(health.router)

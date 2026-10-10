@@ -53,55 +53,66 @@ async def get_admin_dashboard(current_admin: dict = Depends(get_current_admin)):
     def check_secret(val: str) -> bool:
         return bool(val and not val.strip().startswith("your_"))
 
+    from app.integrations.cloudinary_client import CloudinaryClient
+    from app.integrations.rag_adapter import RAGAdapter
+    from app.integrations.whatsapp_client import WhatsAppClient
+
     integrations = [
         IntegrationStatus(
             name="MongoDB Database",
             status="healthy" if db_connected else "disconnected",
-            provider="MongoDB",
+            provider="MongoDB Atlas" if "mongodb.net" in settings.MONGODB_URI else "MongoDB Local",
             is_operational=db_connected,
-            notes=f"Connected to {settings.MONGODB_DATABASE}" if db_connected else "Running in fallback mode",
+            notes=f"Database '{settings.MONGODB_DATABASE}'" if db_connected else "Running in fallback mode",
         ),
         IntegrationStatus(
             name="Groq LLM Reasoning",
             status="configured" if check_secret(settings.GROQ_API_KEY) else "pending_credentials",
             provider=f"Groq ({settings.GROQ_MODEL})",
             is_operational=check_secret(settings.GROQ_API_KEY),
-            notes="Active for intelligent advisory" if check_secret(settings.GROQ_API_KEY) else "Using intelligent structured fallback",
+            notes="Active for intelligent storage advisory" if check_secret(settings.GROQ_API_KEY) else "Using structured fallback",
         ),
         IntegrationStatus(
-            name="RAG Traditional Knowledge",
-            status="active",
-            provider="In-Memory Vector Knowledge Base",
-            is_operational=True,
-            notes="Loaded verified ICAR/CFTRI traditional methods",
+            name="Pinecone Vector RAG",
+            status="configured" if RAGAdapter.is_pinecone_configured() else "pending_credentials",
+            provider=f"Pinecone (Index: {settings.PINECONE_INDEX_NAME})",
+            is_operational=RAGAdapter.is_pinecone_configured(),
+            notes="Connected to live vector index 'sar' + ICAR ITK repository" if RAGAdapter.is_pinecone_configured() else "Local ITK storage repository active",
         ),
         IntegrationStatus(
             name="Weather Forecast API",
-            status="configured" if check_secret(settings.WEATHER_API_KEY) else "pending_credentials",
-            provider="OpenWeatherMap",
-            is_operational=check_secret(settings.WEATHER_API_KEY),
-            notes="Live forecast active" if check_secret(settings.WEATHER_API_KEY) else "Using simulated seasonal weather",
+            status="configured",
+            provider="Open-Meteo",
+            is_operational=True,
+            notes="Live meteorological forecast & ambient storage analysis active",
         ),
         IntegrationStatus(
             name="Agricultural Market Prices",
-            status="configured" if check_secret(settings.MARKET_API_KEY) else "benchmark_active",
-            provider="AGMARKNET / DMI APMC Benchmarks",
+            status="configured",
+            provider="AGMARKNET (APMC Mandis)",
             is_operational=True,
-            notes="Real APMC market benchmark records active",
+            notes="Mandi arrival & modal price tracking active",
         ),
         IntegrationStatus(
             name="Azure Translator",
             status="configured" if check_secret(settings.AZURE_TRANSLATOR_KEY) else "pending_credentials",
-            provider="Microsoft Azure Cognitive Services",
+            provider=f"Microsoft Azure Translator ({settings.AZURE_TRANSLATOR_REGION})",
             is_operational=check_secret(settings.AZURE_TRANSLATOR_KEY),
-            notes="Live cloud translation" if check_secret(settings.AZURE_TRANSLATOR_KEY) else "Using offline multilingual agricultural glossary",
+            notes="Live multilingual neural translation active" if check_secret(settings.AZURE_TRANSLATOR_KEY) else "Offline agricultural glossary active",
         ),
         IntegrationStatus(
             name="WhatsApp Notifications",
-            status="configured" if check_secret(settings.WHATSAPP_API_TOKEN) else "pending_credentials",
-            provider=settings.WHATSAPP_PROVIDER.capitalize(),
-            is_operational=check_secret(settings.WHATSAPP_API_TOKEN),
-            notes="Direct WhatsApp alert dispatch" if check_secret(settings.WHATSAPP_API_TOKEN) else "Alert logging active; pending WhatsApp token",
+            status="configured" if WhatsAppClient.is_configured() else "pending_credentials",
+            provider="Twilio WhatsApp",
+            is_operational=WhatsAppClient.is_configured(),
+            notes=f"Twilio sender {settings.TWILIO_WHATSAPP_FROM} configured" if WhatsAppClient.is_configured() else "Pending Twilio credentials",
+        ),
+        IntegrationStatus(
+            name="Media & Image Storage",
+            status="configured" if CloudinaryClient.is_configured() else "local_fallback",
+            provider=f"Cloudinary ({settings.CLOUDINARY_CLOUD_NAME})" if CloudinaryClient.is_configured() else "Local File Storage",
+            is_operational=True,
+            notes="Cloud media uploads active" if CloudinaryClient.is_configured() else "Local disk storage active",
         ),
     ]
 

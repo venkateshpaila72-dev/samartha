@@ -65,6 +65,13 @@ app.add_middleware(
 # Mount API Routers
 app.include_router(api_router)
 
+# Mount local upload directory for media assets if present
+import os
+from fastapi.staticfiles import StaticFiles
+os.makedirs(settings.STORAGE_UPLOAD_DIR, exist_ok=True)
+app.mount("/static/uploads", StaticFiles(directory=settings.STORAGE_UPLOAD_DIR), name="uploads")
+
+
 
 @app.get("/", tags=["Root"])
 def root():
