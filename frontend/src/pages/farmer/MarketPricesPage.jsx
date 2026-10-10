@@ -77,15 +77,15 @@ export default function MarketPricesPage({ activeBatch }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       <section className="glass-panel" style={{ padding: '24px' }}>
-        <span className="badge badge-verified">Mandi Market Prices</span>
-        <h1 style={{ fontSize: '1.8rem', marginTop: '8px' }}>Agricultural Market Prices</h1>
+        <span className="badge badge-verified"><TranslatedText text="Mandi Market Prices" /></span>
+        <h1 style={{ fontSize: '1.8rem', marginTop: '8px' }}><TranslatedText text="Agricultural Market Prices" /></h1>
         <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '18px' }}>
-          Search actual market records imported into FarmShield. Prices are not estimated or replaced with sample values.
+          <TranslatedText text="Search actual market records imported into FarmShield. Prices are not estimated or replaced with sample values." />
         </p>
 
         <form onSubmit={submit} style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span>Selected crop</span>
+            <span><TranslatedText text="Selected crop" /></span>
             <input
               type="text"
               className="input-field"
@@ -97,7 +97,7 @@ export default function MarketPricesPage({ activeBatch }) {
             />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span>State</span>
+            <span><TranslatedText text="State" /></span>
             <input
               type="text"
               className="input-field"
@@ -109,7 +109,7 @@ export default function MarketPricesPage({ activeBatch }) {
             />
           </label>
           <label style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <span>District (optional)</span>
+            <span><TranslatedText text="District (optional)" /></span>
             <input
               type="text"
               className="input-field"
@@ -120,7 +120,7 @@ export default function MarketPricesPage({ activeBatch }) {
             />
           </label>
           <button type="submit" className="btn-primary" disabled={loading} style={{ alignSelf: 'end' }}>
-            {loading ? 'Loading…' : 'Search Prices'}
+            {loading ? <TranslatedText text="Loading…" /> : <TranslatedText text="Search Prices" />}
           </button>
         </form>
       </section>
@@ -136,7 +136,7 @@ export default function MarketPricesPage({ activeBatch }) {
         <div className="glass-panel" role="status" style={{ padding: '20px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
           <AlertCircle size={20} color="#f59e0b" style={{ flexShrink: 0 }} />
           <div>
-            <strong>Market prices unavailable</strong>
+            <strong><TranslatedText text="Market prices unavailable" /></strong>
             <p style={{ color: '#94a3b8', marginTop: '6px' }}>{error}</p>
           </div>
         </div>
@@ -160,7 +160,7 @@ export default function MarketPricesPage({ activeBatch }) {
               </p>
             </div>
             <div style={{ background: 'rgba(15, 23, 42, 0.7)', padding: '18px 20px', borderRadius: '14px', maxWidth: '520px' }}>
-              <strong style={{ color: '#f59e0b' }}>Market information</strong>
+              <strong style={{ color: '#f59e0b' }}><TranslatedText text="Market information" /></strong>
               <p style={{ fontSize: '0.92rem', color: '#cbd5e1', lineHeight: 1.5, marginTop: '8px' }}>
                 {market.recommendation}
               </p>
@@ -246,7 +246,7 @@ export default function MarketPricesPage({ activeBatch }) {
 
           <section className="glass-panel" style={{ padding: '24px' }}>
             <h3 style={{ fontSize: '1.2rem', marginBottom: '8px' }}><TranslatedText text="7-day price outlook" /></h3>
-            <p style={{ color: '#94a3b8', marginBottom: '14px' }}><TranslatedText text={market.forecast_note || 'Forecast unavailable'} /></p>
+            <p style={{ color: '#94a3b8', marginBottom: '14px' }}>{market.forecast_note || <TranslatedText text="Forecast unavailable" />}</p>
             {forecast.length > 0 ? (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '.9rem' }}>
