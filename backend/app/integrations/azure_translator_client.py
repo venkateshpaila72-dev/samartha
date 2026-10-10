@@ -11,7 +11,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 SUPPORTED_LANGUAGES = {
-    "en", "te", "hi", "mr", "bn", "ta", "kn", "gu"
+    "en", "te", "hi", "mr", "bn", "ta", "kn", "gu", "pa"
 }
 
 CACHE = {}

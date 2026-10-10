@@ -1,15 +1,9 @@
-
-"""Agricultural market-price API endpoints."""
+"""Agricultural Market Price Endpoints."""
 
 from typing import Optional
-<<<<<<< HEAD
-
-from fastapi import APIRouter, Depends, Query
-=======
 import hmac
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
->>>>>>> e593938731cffe4d25d52e76603c5c3a00419be2
 
 from app.api.dependencies import get_current_user, get_owned_batch
 from app.services.farmshield_agent import FarmShieldAgent
@@ -22,27 +16,8 @@ from app.integrations.market_ingestion_client import sync_market_prices
 router = APIRouter(tags=["Market Prices"])
 
 
-@router.get(
-    "/market/prices",
-    response_model=APIResponse[MarketPriceReportOut],
-)
+@router.get("/market/prices", response_model=APIResponse[MarketPriceReportOut])
 async def get_market_prices(
-<<<<<<< HEAD
-    crop: str = Query("Wheat", min_length=1, description="Crop or commodity name"),
-    state: Optional[str] = Query(None, description="User's state"),
-    district: Optional[str] = Query(None, description="User's district"),
-    current_user: dict = Depends(get_current_user),
-):
-    report = await MarketClient.get_market_prices(
-        crop_name=crop,
-        state=state,
-        district=district,
-    )
-
-    return APIResponse(
-        success=True,
-        message=f"Market price lookup completed for {crop}.",
-=======
     crop: str = Query(..., min_length=1, description="Farmer-selected crop"),
     state: Optional[str] = Query(None, description="Farmer state"),
     district: Optional[str] = Query(None, description="Farmer district"),
@@ -61,50 +36,21 @@ async def get_market_prices(
     return APIResponse(
         success=True,
         message="Market price lookup completed.",
->>>>>>> e593938731cffe4d25d52e76603c5c3a00419be2
         data=report,
     )
 
 
-@router.get(
-    "/batches/{batch_id}/market",
-    response_model=APIResponse[MarketPriceReportOut],
-)
+@router.get("/batches/{batch_id}/market", response_model=APIResponse[MarketPriceReportOut])
 async def get_batch_market_prices(
     batch_id: str,
-<<<<<<< HEAD
-    state: Optional[str] = Query(None, description="User's state"),
-    district: Optional[str] = Query(None, description="User's district"),
-    current_user: dict = Depends(get_current_user),
-):
-    # Keep the existing batch-ownership check.
-=======
     state: Optional[str] = Query(None),
     district: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=500),
     skip: int = Query(0, ge=0),
     current_user: dict = Depends(get_current_user),
 ):
->>>>>>> e593938731cffe4d25d52e76603c5c3a00419be2
     batch = get_owned_batch(batch_id, current_user)
     crop_doc = CropRepository.get_by_id(batch.get("crop_id", ""))
-<<<<<<< HEAD
-    crop_name = (
-        crop_doc.get("crop_name")
-        if crop_doc
-        else batch.get("custom_batch_name", "Wheat")
-    )
-
-    report = await MarketClient.get_market_prices(
-        crop_name=crop_name,
-        state=state,
-        district=district,
-    )
-
-    return APIResponse(
-        success=True,
-        message=f"Market price lookup completed for batch crop '{crop_name}'.",
-=======
     crop_name = crop_doc.get("crop_name") if crop_doc else batch.get("custom_batch_name")
 
     if not crop_name:
@@ -121,7 +67,6 @@ async def get_batch_market_prices(
     return APIResponse(
         success=True,
         message="Batch crop market-price lookup completed.",
->>>>>>> e593938731cffe4d25d52e76603c5c3a00419be2
         data=report,
     )
 

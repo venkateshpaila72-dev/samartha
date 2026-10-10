@@ -1,4 +1,3 @@
-
 """API endpoints for translating dynamic text using Azure Translator."""
 
 from fastapi import APIRouter, Depends
@@ -10,22 +9,16 @@ from app.schemas.common import APIResponse
 
 router = APIRouter(tags=["Translation"])
 
-SUPPORTED_LANGUAGE_PATTERN = r"^(en|te|hi|mr|bn|ta|kn|gu)$"
+SUPPORTED_LANGUAGE_PATTERN = r"^(en|te|hi|mr|bn|ta|kn|gu|pa)$"
 
 
 class TranslationRequest(BaseModel):
-<<<<<<< HEAD
     text: str = Field(min_length=1, max_length=5000)
     target_language: str = Field(pattern=SUPPORTED_LANGUAGE_PATTERN)
     source_language: str = Field(
         default="en",
         pattern=SUPPORTED_LANGUAGE_PATTERN,
     )
-=======
-    text: str = Field(min_length=1)
-    target_language: str = Field(pattern="^(hi|te|ta|kn|mr|bn|pa|en)$")
-    source_language: str = Field(default="en", pattern="^(hi|te|ta|kn|mr|bn|pa|en)$")
->>>>>>> e593938731cffe4d25d52e76603c5c3a00419be2
 
 
 class BatchTranslationRequest(BaseModel):
