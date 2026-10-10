@@ -45,13 +45,22 @@ export function AuthProvider({ children }) {
     return res.data.user;
   };
 
+  const updateProfile = async (updates) => {
+    const res = await apiRequest('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+    setUser(res.data);
+    return res.data;
+  };
+
   const logout = () => {
     localStorage.removeItem('farmshield_token');
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, updateProfile, logout }}>
       {children}
     </AuthContext.Provider>
   );
