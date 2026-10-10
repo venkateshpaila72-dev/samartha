@@ -1,7 +1,7 @@
 import datetime
 import re
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.api.dependencies import get_current_user, get_owned_batch
 from app.repositories.alert_repository import AlertRepository
@@ -182,6 +182,7 @@ async def dispatch_whatsapp_alert(
     AlertRepository.update(
         alert_id,
         {
+            "whatsapp_message_sid": delivery_res.message_sid,
             "whatsapp_notified": delivery_res.success,
             "whatsapp_delivery_status": delivery_res.status,
             "whatsapp_last_attempt_at": now_iso,
@@ -196,6 +197,7 @@ async def dispatch_whatsapp_alert(
         data={
             "alert_id": alert_id,
             "provider": "Twilio",
+            "message_sid": delivery_res.message_sid,
             "dispatched": delivery_res.success,
             "status": delivery_res.status,
             "recipient": delivery_res.recipient_masked,
@@ -206,37 +208,68 @@ async def dispatch_whatsapp_alert(
 
 @router.post("/alerts/twilio-callback")
 async def twilio_status_callback(
+    request: Request,
     MessageSid: Optional[str] = Query(None),
     MessageStatus: Optional[str] = Query(None),
     ErrorCode: Optional[str] = Query(None),
     ErrorMessage: Optional[str] = Query(None),
 ):
-    """Twilio WhatsApp delivery status callback webhook to distinguish API acceptance from delivery."""
+    """Twilio WhatsApp delivery status callback webhook to distinguish API acceptance from confirmed delivery.
+    Supports both application/x-www-form-urlencoded payloads (Twilio standard) and query parameters.
+    """
     from app.db.collection_names import NOTIFICATION_LOGS_COLLECTION, STORAGE_ALERTS_COLLECTION
     from app.db.mongo import get_db
 
-    if not MessageSid:
+    sid = MessageSid
+    status_raw = MessageStatus
+    err_code = ErrorCode
+    err_msg = ErrorMessage
+
+    try:
+        form = await request.form()
+        sid = sid or form.get("MessageSid")
+        status_raw = status_raw or form.get("MessageStatus")
+        err_code = err_code or form.get("ErrorCode")
+        err_msg = err_msg or form.get("ErrorMessage")
+    except Exception:
+        pass
+
+    if not sid:
         return {"status": "ignored"}
 
-    status_str = (MessageStatus or "").lower()
+    status_str = (status_raw or "").lower()
+    update_fields = {"whatsapp_delivery_status": status_str}
+
+    if status_str in ("failed", "undelivered"):
+        update_fields["whatsapp_notified"] = False
+        update_fields["whatsapp_delivery_error"] = err_msg or f"Twilio delivery failed (code {err_code or 'unknown'})"
+    elif status_str in ("delivered", "read"):
+        update_fields["whatsapp_notified"] = True
+        update_fields["whatsapp_delivery_error"] = None
+    elif status_str in ("sent", "queued", "accepted"):
+        update_fields["whatsapp_notified"] = False  # Queued or accepted does not mean delivered!
+
     db = get_db()
     if db is not None:
         try:
-            update_fields = {"whatsapp_delivery_status": status_str}
-            if status_str in ("failed", "undelivered"):
-                update_fields["whatsapp_notified"] = False
-                update_fields["whatsapp_delivery_error"] = ErrorMessage or f"Twilio delivery failed (code {ErrorCode})"
-            elif status_str in ("delivered", "read"):
-                update_fields["whatsapp_notified"] = True
-                update_fields["whatsapp_delivery_error"] = None
-
-            # Update notification logs
+            # 1. Update active alerts matching this Twilio message SID
+            db[STORAGE_ALERTS_COLLECTION].update_many(
+                {"whatsapp_message_sid": sid},
+                {"$set": update_fields},
+            )
+            # 2. Update notification audit logs
             db[NOTIFICATION_LOGS_COLLECTION].update_many(
-                {"message_sid": MessageSid},
-                {"$set": {"status": status_str, "error": ErrorMessage if status_str in ("failed", "undelivered") else None}},
+                {"message_sid": sid},
+                {"$set": {"status": status_str, "error": err_msg if status_str in ("failed", "undelivered") else None}},
             )
         except Exception:
             pass
 
-    return {"status": "recorded", "message_sid": MessageSid, "delivery_status": status_str}
+    # In-memory test cache update
+    from app.repositories.alert_repository import _IN_MEMORY_ALERTS
+    for a in _IN_MEMORY_ALERTS.values():
+        if a.get("whatsapp_message_sid") == sid:
+            a.update(update_fields)
+
+    return {"status": "recorded", "message_sid": sid, "delivery_status": status_str}
 

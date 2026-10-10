@@ -15,6 +15,8 @@ import {
   RefreshCw,
   MessageSquare,
   Clock,
+  X,
+  Send,
 } from 'lucide-react';
 
 export default function FarmerDashboard({ activeBatch, onNavigate }) {
@@ -22,21 +24,56 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
   const [weather, setWeather] = useState(null);
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState(null);
+
+  // Quick Log Measurement Modal State
+  const [showLogModal, setShowLogModal] = useState(false);
+  const [logTemp, setLogTemp] = useState('37.0');
+  const [logRH, setLogRH] = useState('58.0');
+  const [logMoisture, setLogMoisture] = useState('');
+  const [logProvenance, setLogProvenance] = useState('manual');
+  const [submittingLog, setSubmittingLog] = useState(false);
+
+  // Action Plan Modal State
+  const [selectedActionAlert, setSelectedActionAlert] = useState(null);
+  const [dispatchingId, setDispatchingId] = useState(null);
+  const [dispatchFeedback, setDispatchFeedback] = useState(null);
 
   const fetchDashboardData = async () => {
     if (!activeBatch) return;
     setLoading(true);
+    setDashboardError(null);
     try {
-      const [sumData, wData, mData] = await Promise.all([
-        monitoringService.getMonitoringSummary(activeBatch.batch_id).catch(() => null),
+      const [sumData, alertsData, wData, mData] = await Promise.all([
+        monitoringService.getMonitoringSummary(activeBatch.batch_id).catch((err) => {
+          console.warn('Monitoring summary fetch notice:', err);
+          return null;
+        }),
+        monitoringService.getAlerts(activeBatch.batch_id, 'active').catch(() => []),
         weatherService.getBatchWeather(activeBatch.batch_id).catch(() => null),
         marketService.getBatchMarketPrices(activeBatch.batch_id).catch(() => null),
       ]);
-      setSummary(sumData);
+
+      const mergedAlerts = (sumData?.active_alerts && sumData.active_alerts.length > 0)
+        ? sumData.active_alerts
+        : (alertsData || []);
+
+      if (sumData) {
+        setSummary({ ...sumData, active_alerts: mergedAlerts });
+      } else if (alertsData) {
+        setSummary({
+          batch_id: activeBatch.batch_id,
+          crop_name: activeBatch.crop_profile?.crop_name || activeBatch.custom_batch_name,
+          current_temperature_c: activeBatch.latest_reading?.temperature_c,
+          current_humidity_percent: activeBatch.latest_reading?.relative_humidity_percent,
+          active_alerts: mergedAlerts,
+        });
+      }
       setWeather(wData);
       setMarket(mData);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
+      setDashboardError(err.message || 'Failed to load storage dashboard data. Please check connectivity.');
     } finally {
       setLoading(false);
     }
@@ -44,7 +81,78 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
 
   useEffect(() => {
     fetchDashboardData();
+
+    const handleUpdate = () => {
+      fetchDashboardData();
+    };
+
+    window.addEventListener('farmshield:reading-ingested', handleUpdate);
+    window.addEventListener('farmshield:alert-updated', handleUpdate);
+    return () => {
+      window.removeEventListener('farmshield:reading-ingested', handleUpdate);
+      window.removeEventListener('farmshield:alert-updated', handleUpdate);
+    };
   }, [activeBatch]);
+
+  const handleQuickLogSubmit = async (e) => {
+    e.preventDefault();
+    if (!activeBatch) return;
+    setSubmittingLog(true);
+    try {
+      const payload = {
+        batch_id: activeBatch.batch_id,
+        temperature_c: Number(logTemp),
+        relative_humidity_percent: Number(logRH),
+        sensor_id: 'dashboard_reading_entry',
+        provenance: logProvenance,
+      };
+      if (logMoisture && !isNaN(Number(logMoisture))) {
+        payload.crop_moisture_percent = Number(logMoisture);
+      }
+      await monitoringService.ingestReading(activeBatch.batch_id, payload);
+      setShowLogModal(false);
+      await fetchDashboardData();
+      window.dispatchEvent(new CustomEvent('farmshield:reading-ingested', { detail: { batch_id: activeBatch.batch_id } }));
+    } catch (err) {
+      alert(err.message || 'Failed to log measurement.');
+    } finally {
+      setSubmittingLog(false);
+    }
+  };
+
+  const handleQuickDispatch = async (alertId) => {
+    setDispatchingId(alertId);
+    setDispatchFeedback(null);
+    try {
+      const res = await monitoringService.dispatchWhatsAppAlert(alertId);
+      const isOk = Boolean(res.success || res.dispatched || ['accepted', 'queued', 'sent', 'delivered'].includes(res.status));
+      setDispatchFeedback({
+        alertId,
+        type: isOk ? 'success' : 'error',
+        text: res.message || (isOk ? 'WhatsApp alert dispatched via Twilio.' : 'Dispatch failed.'),
+      });
+      await fetchDashboardData();
+    } catch (err) {
+      setDispatchFeedback({
+        alertId,
+        type: 'error',
+        text: err.message || 'Twilio WhatsApp dispatch failed.',
+      });
+    } finally {
+      setDispatchingId(null);
+    }
+  };
+
+  const handleResolveAlert = async (alertId) => {
+    try {
+      await monitoringService.updateAlertStatus(alertId, 'resolved');
+      setSelectedActionAlert(null);
+      await fetchDashboardData();
+      window.dispatchEvent(new CustomEvent('farmshield:alert-updated', { detail: { alertId } }));
+    } catch (err) {
+      alert(err.message || 'Could not resolve alert.');
+    }
+  };
 
   if (!activeBatch) {
     return (
@@ -80,8 +188,13 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
   const currentTemp = summary?.current_temperature_c;
   const currentRH = summary?.current_humidity_percent;
 
-  const isTempSafe = currentTemp != null && currentTemp >= crop.recommended_temperature_min_c && currentTemp <= crop.recommended_temperature_max_c;
-  const isRHSafe = currentRH != null && currentRH >= crop.recommended_relative_humidity_min_percent && currentRH <= crop.recommended_relative_humidity_max_percent;
+  const tMin = crop.recommended_temperature_min_c ?? 15.0;
+  const tMax = crop.recommended_temperature_max_c ?? 22.0;
+  const rhMin = crop.recommended_relative_humidity_min_percent ?? 50.0;
+  const rhMax = crop.recommended_relative_humidity_max_percent ?? 65.0;
+
+  const isTempSafe = currentTemp != null && currentTemp >= tMin && currentTemp <= tMax;
+  const isRHSafe = currentRH != null && currentRH >= rhMin && currentRH <= rhMax;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -108,37 +221,60 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
           <button
             className="btn-secondary"
             onClick={fetchDashboardData}
-            title="Refresh Readings"
+            title="Refresh Readings and Alerts"
           >
             <RefreshCw size={16} className={loading ? 'spin' : ''} /> Refresh
           </button>
           <button
             className="btn-primary"
-            onClick={() => onNavigate('monitoring')}
+            onClick={() => setShowLogModal(true)}
+            title="Log a new storage sensor measurement"
           >
             Log Measurement <ArrowRight size={16} />
           </button>
         </div>
       </div>
 
-      {/* Active Alerts Banner if any */}
+      {/* API Error Notification */}
+      {dashboardError && (
+        <div style={{
+          padding: '16px 20px',
+          borderRadius: '12px',
+          background: 'rgba(239, 68, 68, 0.15)',
+          border: '1px solid rgba(239, 68, 68, 0.4)',
+          color: '#f87171',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <div>
+            <strong>Error loading dashboard:</strong> {dashboardError}
+          </div>
+          <button className="btn-secondary" onClick={fetchDashboardData} style={{ padding: '6px 14px' }}>
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Active Alerts Banner */}
       {summary?.active_alerts && summary.active_alerts.length > 0 && (
         <div style={{
           background: 'rgba(239, 68, 68, 0.12)',
-          border: '1px solid rgba(239, 68, 68, 0.35)',
+          border: '1px solid rgba(239, 68, 68, 0.45)',
           borderRadius: '16px',
-          padding: '18px 24px',
+          padding: '20px 24px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '12px'
+          gap: '14px',
+          boxShadow: '0 8px 24px rgba(239, 68, 68, 0.12)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ef4444', fontWeight: '700' }}>
-              <AlertTriangle size={22} />
-              <span>Active Storage Violations Detected ({summary.active_alerts.length})</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ef4444', fontWeight: '800', fontSize: '1.05rem' }}>
+              <AlertTriangle size={24} />
+              <span>ACTIVE STORAGE VIOLATION DETECTED ({summary.active_alerts.length})</span>
             </div>
-            <span style={{ fontSize: '0.82rem', color: '#cbd5e1' }}>
-              Notifications dispatched automatically to registered farmer profile
+            <span style={{ fontSize: '0.85rem', color: '#cbd5e1' }}>
+              Automatic alert evaluation against verified scientific limits
             </span>
           </div>
 
@@ -161,24 +297,31 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
               delivBadgeText = 'WhatsApp: DELIVERY FAILED';
             }
 
+            const limitDisplay = (al.target_range_min != null && al.target_range_max != null)
+              ? `${al.target_range_min}${al.unit || '°C'}–${al.target_range_max}${al.unit || '°C'}`
+              : (al.target_threshold != null ? `${al.target_threshold}${al.unit || '°C'}` : 'Limit configured');
+
             return (
               <div
                 key={al.alert_id || idx}
                 style={{
-                  background: 'rgba(15, 23, 42, 0.75)',
-                  borderLeft: isCrit ? '4px solid #ef4444' : '4px solid #f59e0b',
-                  padding: '14px 18px',
-                  borderRadius: '10px',
+                  background: 'rgba(15, 23, 42, 0.85)',
+                  borderLeft: isCrit ? '5px solid #ef4444' : '5px solid #f59e0b',
+                  padding: '16px 20px',
+                  borderRadius: '12px',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: '10px'
+                  gap: '12px'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                      <span className={`badge ${isCrit ? 'badge-critical' : 'badge-warning'}`}>
-                        {al.condition_type.replace('_', ' ').toUpperCase()}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                  <div style={{ flex: 1, minWidth: '280px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                      <span className={`badge ${isCrit ? 'badge-critical' : 'badge-warning'}`} style={{ fontWeight: '700' }}>
+                        {al.condition_type ? al.condition_type.replace('_', ' ').toUpperCase() : 'THRESHOLD VIOLATION'}
+                      </span>
+                      <span className={`badge ${isCrit ? 'badge-critical' : 'badge-warning'}`} style={{ fontSize: '0.75rem' }}>
+                        SEVERITY: {al.severity ? al.severity.toUpperCase() : (isCrit ? 'CRITICAL' : 'WARNING')}
                       </span>
                       <span className={`badge ${delivBadgeClass}`} style={{ fontSize: '0.75rem' }}>
                         <MessageSquare size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
@@ -196,36 +339,78 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
                         </span>
                       )}
                     </div>
-                    <div style={{ color: '#f8fafc', fontWeight: '600', fontSize: '0.96rem' }}>
+
+                    <div style={{ color: '#f8fafc', fontWeight: '700', fontSize: '1.02rem', marginBottom: '4px' }}>
                       {al.message}
                     </div>
-                    <div style={{ fontSize: '0.84rem', color: '#94a3b8', marginTop: '4px' }}>
-                      Actual: <strong style={{ color: isCrit ? '#f87171' : '#fbbf24' }}>{al.measured_value}{al.unit || '°C'}</strong>
-                      {al.target_range_min != null && al.target_range_max != null && (
-                        <span> • Safe Limit: <strong style={{ color: '#34d399' }}>{al.target_range_min}{al.unit}–{al.target_range_max}{al.unit}</strong></span>
-                      )}
+
+                    <div style={{ fontSize: '0.88rem', color: '#cbd5e1', display: 'flex', gap: '16px', flexWrap: 'wrap', margin: '6px 0' }}>
+                      <span>Actual Reading: <strong style={{ color: isCrit ? '#f87171' : '#fbbf24', fontSize: '1rem' }}>{al.measured_value}{al.unit || '°C'}</strong></span>
+                      <span>Verified Safe Limit: <strong style={{ color: '#34d399' }}>{limitDisplay}</strong></span>
+                    </div>
+
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.04)',
+                      padding: '10px 14px',
+                      borderRadius: '8px',
+                      borderLeft: '3px solid #38bdf8',
+                      fontSize: '0.86rem',
+                      color: '#e2e8f0',
+                      marginTop: '8px'
+                    }}>
+                      <strong style={{ color: '#38bdf8' }}>Recommended Action: </strong>
+                      {al.recommended_action || 'Inspect storage ventilation immediately and recheck readings.'}
                     </div>
                   </div>
 
-                  <button
-                    className="btn-secondary"
-                    style={{ fontSize: '0.82rem', padding: '6px 14px', alignSelf: 'center' }}
-                    onClick={() => onNavigate('alerts')}
-                  >
-                    View Action Plan <ArrowRight size={14} />
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', minWidth: '150px' }}>
+                    <button
+                      className="btn-primary"
+                      style={{ fontSize: '0.82rem', padding: '8px 14px', width: '100%', justifyContent: 'center' }}
+                      onClick={() => setSelectedActionAlert(al)}
+                    >
+                      Take Corrective Action <ArrowRight size={14} />
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      style={{ fontSize: '0.82rem', padding: '7px 12px', width: '100%', justifyContent: 'center' }}
+                      onClick={() => handleQuickDispatch(al.alert_id)}
+                      disabled={dispatchingId === al.alert_id}
+                    >
+                      <MessageSquare size={13} /> {dispatchingId === al.alert_id ? 'Sending...' : 'Dispatch WhatsApp'}
+                    </button>
+                    <button
+                      style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer', textAlign: 'center', marginTop: '2px' }}
+                      onClick={() => onNavigate('alerts')}
+                    >
+                      View All Alerts →
+                    </button>
+                  </div>
                 </div>
+
+                {dispatchFeedback && dispatchFeedback.alertId === al.alert_id && (
+                  <div style={{
+                    fontSize: '0.82rem',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    background: dispatchFeedback.type === 'success' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    color: dispatchFeedback.type === 'success' ? '#34d399' : '#f87171',
+                    border: dispatchFeedback.type === 'success' ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)'
+                  }}>
+                    {dispatchFeedback.text}
+                  </div>
+                )}
 
                 {al.whatsapp_delivery_error && (
                   <div style={{
                     fontSize: '0.8rem',
                     color: '#fca5a5',
                     background: 'rgba(239, 68, 68, 0.1)',
-                    padding: '6px 10px',
+                    padding: '8px 12px',
                     borderRadius: '6px',
                     borderLeft: '3px solid #ef4444'
                   }}>
-                    ⚠️ <strong>Delivery Notice:</strong> {al.whatsapp_delivery_error}
+                    ⚠️ <strong>Twilio Delivery Status:</strong> {al.whatsapp_delivery_error}
                   </div>
                 )}
               </div>
@@ -392,6 +577,321 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
           )}
         </div>
       </div>
+
+      {/* Quick Measurement Entry Modal */}
+      {showLogModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(10, 15, 29, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            maxWidth: '520px',
+            width: '100%',
+            padding: '28px',
+            position: 'relative',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
+            border: '1px solid rgba(255, 255, 255, 0.15)'
+          }}>
+            <button
+              onClick={() => setShowLogModal(false)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <h2 style={{ fontSize: '1.35rem', color: '#f8fafc', marginBottom: '8px' }}>
+              Log Storage Reading
+            </h2>
+            <p style={{ color: '#94a3b8', fontSize: '0.88rem', marginBottom: '20px' }}>
+              Batch: <strong style={{ color: '#38bdf8' }}>{activeBatch.custom_batch_name}</strong> ({crop.crop_name})
+            </p>
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              padding: '12px 14px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              fontSize: '0.85rem',
+              color: '#cbd5e1'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span>Verified Safe Temperature:</span>
+                <strong style={{ color: '#34d399' }}>{crop.recommended_temperature_min_c}°C – {crop.recommended_temperature_max_c}°C</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Verified Safe Humidity:</span>
+                <strong style={{ color: '#34d399' }}>{crop.recommended_relative_humidity_min_percent}% – {crop.recommended_relative_humidity_max_percent}%</strong>
+              </div>
+            </div>
+
+            {/* Simulation Presets for Testing */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '8px' }}>
+                Quick Presets (for Instant Threshold Evaluation):
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  style={{
+                    fontSize: '0.78rem',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    background: 'rgba(239, 68, 68, 0.15)',
+                    color: '#f87171',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => { setLogTemp('37.0'); setLogRH('58.0'); }}
+                >
+                  🔥 37.0°C Heat Spike
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    fontSize: '0.78rem',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    background: 'rgba(16, 185, 129, 0.15)',
+                    color: '#34d399',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => { setLogTemp('18.5'); setLogRH('56.0'); }}
+                >
+                  ✅ 18.5°C Safe Reading
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    fontSize: '0.78rem',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    background: 'rgba(59, 130, 246, 0.15)',
+                    color: '#60a5fa',
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => { setLogTemp('21.0'); setLogRH('78.0'); }}
+                >
+                  💧 78% High Humidity
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleQuickLogSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                  Storage Temperature (°C) *
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  required
+                  className="input-field"
+                  value={logTemp}
+                  onChange={(e) => setLogTemp(e.target.value)}
+                  placeholder="e.g. 37.0"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                  Relative Humidity (%) *
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  required
+                  className="input-field"
+                  value={logRH}
+                  onChange={(e) => setLogRH(e.target.value)}
+                  placeholder="e.g. 58.0"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                  Crop Moisture Content (%) <span style={{ color: '#64748b' }}>(optional)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  className="input-field"
+                  value={logMoisture}
+                  onChange={(e) => setLogMoisture(e.target.value)}
+                  placeholder="e.g. 11.8"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: '#cbd5e1', marginBottom: '6px' }}>
+                  Source / Sensor Type
+                </label>
+                <select
+                  className="input-field"
+                  value={logProvenance}
+                  onChange={(e) => setLogProvenance(e.target.value)}
+                >
+                  <option value="manual">Manual Farmer Measurement</option>
+                  <option value="hardware_sensor">Hardware IoT Telemetry</option>
+                  <option value="simulated">Test Simulation</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  style={{ flex: 1, justifyContent: 'center' }}
+                  onClick={() => setShowLogModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingLog}
+                  className="btn-primary"
+                  style={{ flex: 2, justifyContent: 'center' }}
+                >
+                  {submittingLog ? 'Ingesting & Evaluating...' : 'Submit & Check Limits'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Corrective Action Procedure Modal */}
+      {selectedActionAlert && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(10, 15, 29, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div className="glass-panel" style={{
+            maxWidth: '580px',
+            width: '100%',
+            padding: '28px',
+            position: 'relative',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.6)',
+            border: '1px solid rgba(255, 255, 255, 0.15)'
+          }}>
+            <button
+              onClick={() => setSelectedActionAlert(null)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'transparent',
+                border: 'none',
+                color: '#94a3b8',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <span className={`badge ${selectedActionAlert.severity === 'critical' ? 'badge-critical' : 'badge-warning'}`}>
+                {selectedActionAlert.severity?.toUpperCase()} ALERT
+              </span>
+              <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+                ID: {selectedActionAlert.alert_id}
+              </span>
+            </div>
+
+            <h2 style={{ fontSize: '1.35rem', color: '#f8fafc', marginBottom: '14px' }}>
+              Corrective Action Protocol: {selectedActionAlert.crop_name}
+            </h2>
+
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.12)',
+              borderLeft: '4px solid #ef4444',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              marginBottom: '18px'
+            }}>
+              <div style={{ fontWeight: '600', color: '#f87171', fontSize: '0.95rem' }}>
+                {selectedActionAlert.message}
+              </div>
+              <div style={{ fontSize: '0.86rem', color: '#cbd5e1', marginTop: '6px' }}>
+                Measured Value: <strong>{selectedActionAlert.measured_value}{selectedActionAlert.unit || '°C'}</strong>
+                {selectedActionAlert.target_range_max != null && (
+                  <span> (Safe Limit: {selectedActionAlert.target_range_min ?? 15}{selectedActionAlert.unit}–{selectedActionAlert.target_range_max}{selectedActionAlert.unit})</span>
+                )}
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              padding: '16px',
+              borderRadius: '10px',
+              marginBottom: '20px'
+            }}>
+              <div style={{ fontWeight: '600', color: '#38bdf8', marginBottom: '8px', fontSize: '0.92rem' }}>
+                📋 Prescribed Steps:
+              </div>
+              <div style={{ fontSize: '0.9rem', color: '#e2e8f0', lineHeight: 1.6 }}>
+                {selectedActionAlert.recommended_action}
+              </div>
+            </div>
+
+            {selectedActionAlert.whatsapp_recipient_masked && (
+              <div style={{ fontSize: '0.82rem', color: '#94a3b8', marginBottom: '16px' }}>
+                WhatsApp Recipient: <strong style={{ color: '#e2e8f0' }}>{selectedActionAlert.whatsapp_recipient_masked}</strong>
+                {selectedActionAlert.whatsapp_last_status && (
+                  <span> • Status: <strong style={{ color: '#34d399' }}>{selectedActionAlert.whatsapp_last_status}</strong></span>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <button
+                className="btn-secondary"
+                style={{ flex: 1, justifyContent: 'center' }}
+                disabled={dispatchingId === selectedActionAlert.alert_id}
+                onClick={() => handleQuickDispatch(selectedActionAlert.alert_id)}
+              >
+                <Send size={15} /> {dispatchingId === selectedActionAlert.alert_id ? 'Dispatching...' : 'Dispatch WhatsApp Alert'}
+              </button>
+              <button
+                className="btn-primary"
+                style={{ flex: 1, justifyContent: 'center' }}
+                onClick={() => handleResolveAlert(selectedActionAlert.alert_id)}
+              >
+                <CheckCircle size={15} /> Mark as Resolved
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

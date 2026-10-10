@@ -24,6 +24,7 @@ class StorageAlertOut(BaseModel):
     whatsapp_recipient_masked: Optional[str] = None
     whatsapp_last_attempt_at: Optional[str] = None
     whatsapp_delivery_error: Optional[str] = None
+    whatsapp_message_sid: Optional[str] = None
     created_at: str
     resolved_at: Optional[str] = None
 

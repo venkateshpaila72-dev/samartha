@@ -339,6 +339,7 @@ class MonitoringService:
         AlertRepository.update(
             alert_id,
             {
+                "whatsapp_message_sid": delivery_result.message_sid,
                 "whatsapp_notified": delivery_result.success,
                 "whatsapp_delivery_status": delivery_result.status,
                 "whatsapp_last_attempt_at": now_iso,
@@ -353,10 +354,87 @@ class MonitoringService:
         if not batch:
             raise ValueError(f"Storage batch '{batch_id}' not found.")
 
-        crop_profile = CropRepository.get_by_id(batch["crop_id"]) or {}
+        crop_profile = CropRepository.get_by_id(batch.get("crop_id", "")) or {}
+        if not crop_profile:
+            crop_name = batch.get("custom_batch_name", "Crop")
+            crop_lower = (batch.get("crop_id", "") + " " + crop_name).lower()
+            is_wheat = "wheat" in crop_lower
+            crop_profile = {
+                "crop_name": crop_name,
+                "recommended_temperature_min_c": 15.0,
+                "recommended_temperature_max_c": 22.0 if is_wheat else 25.0,
+                "recommended_relative_humidity_min_percent": 50.0,
+                "recommended_relative_humidity_max_percent": 65.0 if is_wheat else 70.0,
+                "recommended_crop_moisture_percent": 11.5 if is_wheat else 12.0,
+            }
+
         latest = SensorRepository.get_latest_for_batch(batch_id)
         recent = SensorRepository.list_for_batch(batch_id, limit=20)
         active_alerts = AlertRepository.list_by_batch(batch_id, status="active")
+
+        # Evaluate latest reading against verified crop threshold rules
+        if latest:
+            violations = evaluate_measurement_rules(
+                latest.get("temperature_c", 20.0),
+                latest.get("relative_humidity_percent", 60.0),
+                latest.get("crop_moisture_percent"),
+                crop_profile,
+            )
+            active_types = {v.condition_type for v in violations}
+
+            for v in violations:
+                existing = AlertRepository.get_active_condition(batch_id, v.condition_type)
+                if not existing:
+                    # Persist threshold violation alert immediately to MongoDB
+                    alert_id = f"alert_{uuid.uuid4().hex[:10]}"
+                    now_iso = latest.get("timestamp") or datetime.datetime.now(datetime.timezone.utc).isoformat()
+                    owner_id = batch.get("farmer_id") or batch.get("user_id")
+                    owner = UserRepository.get_by_id(owner_id) if owner_id else None
+                    target_phone = None
+                    if owner:
+                        prefs = owner.get("notification_preferences", {})
+                        target_phone = prefs.get("whatsapp_phone_number") or owner.get("phone_number")
+
+                    alert_doc = {
+                        "alert_id": alert_id,
+                        "batch_id": batch_id,
+                        "farmer_id": owner_id,
+                        "crop_name": crop_profile.get("crop_name", "Crop"),
+                        "condition_type": v.condition_type,
+                        "severity": v.severity,
+                        "measured_value": v.measured_value,
+                        "target_threshold": v.target_threshold,
+                        "target_range_min": v.target_min,
+                        "target_range_max": v.target_max,
+                        "unit": v.unit,
+                        "message": v.message,
+                        "recommended_action": v.recommended_action,
+                        "status": "active",
+                        "whatsapp_notified": False,
+                        "whatsapp_delivery_status": "pending",
+                        "whatsapp_recipient_masked": mask_phone_number(target_phone),
+                        "whatsapp_last_attempt_at": None,
+                        "whatsapp_delivery_error": None,
+                        "whatsapp_message_sid": None,
+                        "created_at": now_iso,
+                        "resolved_at": None,
+                    }
+                    AlertRepository.create(alert_doc)
+                    active_alerts.insert(0, alert_doc)
+                else:
+                    # Keep active alert updated with latest measurement
+                    if existing.get("measured_value") != v.measured_value:
+                        AlertRepository.update(
+                            existing["alert_id"],
+                            {
+                                "measured_value": v.measured_value,
+                                "severity": v.severity,
+                                "message": v.message,
+                            },
+                        )
+                        existing["measured_value"] = v.measured_value
+                        existing["severity"] = v.severity
+                        existing["message"] = v.message
 
         risk = "normal"
         if any(a.get("severity") == "critical" for a in active_alerts):

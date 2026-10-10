@@ -57,6 +57,7 @@ export default function MonitoringPage({ activeBatch }) {
         provenance: provenanceInput,
       });
       await loadData();
+      window.dispatchEvent(new CustomEvent('farmshield:reading-ingested', { detail: { batch_id: activeBatch.batch_id } }));
       alert('Measurement logged and evaluated against storage thresholds!');
     } catch (err) {
       alert(err.message || 'Error ingesting reading');
