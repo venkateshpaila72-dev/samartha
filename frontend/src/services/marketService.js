@@ -11,6 +11,14 @@ function buildQuery({ crop, state, district, limit = 50, skip = 0 } = {}) {
 }
 
 export const marketService = {
+  async syncMarketPrices({ crop, state, district } = {}) {
+    if (!crop?.trim() || !state?.trim()) throw new Error('Select a crop and state before syncing market prices.');
+    const params = new URLSearchParams({ crop: crop.trim(), state: state.trim() });
+    if (district?.trim()) params.set('district', district.trim());
+    const response = await apiRequest(`/market/sync-now?${params.toString()}`, { method: 'POST' });
+    return response.data;
+  },
+
   async getMarketPrices(crop, location = {}, pagination = {}) {
     if (!crop || !String(crop).trim()) {
       throw new Error('Select a crop before searching for market prices.');

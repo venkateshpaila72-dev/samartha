@@ -36,7 +36,7 @@ def _numeric(record: dict[str, Any], *keys: str) -> float | None:
         if raw is None or not str(raw).strip():
             continue
         try:
-            value = float(re.sub(r"[^0-9.\\-]", "", str(raw).replace(",", "")))
+            value = float(str(raw).replace(",", "").replace("₹", "").strip())
             if value >= 0:
                 return value
         except (TypeError, ValueError):
