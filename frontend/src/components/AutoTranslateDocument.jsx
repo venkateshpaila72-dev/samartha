@@ -6,6 +6,8 @@ const SKIP_TAGS = new Set(['SCRIPT','STYLE','NOSCRIPT','CODE','PRE','TEXTAREA','
 const originals = new WeakMap();
 const translated = new WeakSet();
 const attrOriginals = new WeakMap();
+const trackedNodes = new Set();
+const trackedElements = new Set();
 
 function eligible(value) {
   const text = String(value ?? '').trim();
@@ -36,6 +38,7 @@ export default function AutoTranslateDocument() {
         if (!eligible(value)) continue;
         let stored = attrOriginals.get(element);
         if (!stored) { stored = {}; attrOriginals.set(element, stored); }
+        trackedElements.add(element);
         if (!(attr in stored)) stored[attr] = value;
         pending.set(element, { kind: 'attribute', attr, source: stored[attr] });
       }
@@ -57,6 +60,7 @@ export default function AutoTranslateDocument() {
           const value = originals.has(node) ? originals.get(node) : node.nodeValue;
           if (!eligible(value)) continue;
           if (!originals.has(node)) originals.set(node, value);
+          trackedNodes.add(node);
           pending.set(node, { kind: 'text', source: originals.get(node) });
         }
       }
@@ -130,7 +134,15 @@ export default function AutoTranslateDocument() {
       observer.disconnect();
       // Restore text from its source when switching languages so we never
       // translate a translation as if it were English.
-      for (const [node, source] of []) { node.nodeValue = source; }
+      for (const node of trackedNodes) {
+        const source = originals.get(node);
+        if (node.isConnected && source !== undefined) node.nodeValue = source;
+        translated.delete(node);
+      }
+      for (const element of trackedElements) {
+        const attrs = attrOriginals.get(element) || {};
+        if (element.isConnected) Object.entries(attrs).forEach(([attr, source]) => element.setAttribute(attr, source));
+      }
     };
   }, [currentLang]);
 
