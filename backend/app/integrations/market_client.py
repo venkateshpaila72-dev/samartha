@@ -62,8 +62,13 @@ def _forecast(points: list[MarketPricePoint]) -> tuple[list[MarketPriceForecastP
             "A forecast is an estimate, not a guaranteed future price."
         )
 
+    # Use elapsed calendar days rather than row positions: market records often skip
+    # weekends or dates with no reported arrivals, and those gaps must not be treated
+    # as one-day intervals.
+    dates = [datetime.date.fromisoformat(point.date) for point in points]
     values = [p.average_modal_price_per_quintal for p in points]
-    xs = list(range(len(values)))
+    origin = dates[0]
+    xs = [(day - origin).days for day in dates]
     x_mean = sum(xs) / len(xs)
     y_mean = sum(values) / len(values)
     denom = sum((x - x_mean) ** 2 for x in xs)
@@ -72,11 +77,13 @@ def _forecast(points: list[MarketPricePoint]) -> tuple[list[MarketPriceForecastP
     residuals = [y - (intercept + slope * x) for x, y in zip(xs, values)]
     residual_std = math.sqrt(sum(r * r for r in residuals) / max(1, len(residuals) - 2))
     baseline = max(1.0, abs(y_mean))
-    uncertainty = max(1.96 * residual_std, baseline * 0.03)
-    last_date = datetime.date.fromisoformat(points[-1].date)
+    last_date = dates[-1]
     forecasts = []
     for day in range(1, 8):
-        prediction = max(0.0, intercept + slope * (len(values) - 1 + day))
+        future_x = (last_date - origin).days + day
+        prediction = max(0.0, intercept + slope * future_x)
+        leverage = math.sqrt(1 + ((future_x - x_mean) ** 2 / denom)) if denom else 1.0
+        uncertainty = max(1.96 * residual_std * leverage, baseline * 0.03)
         forecasts.append(MarketPriceForecastPoint(
             date=(last_date + datetime.timedelta(days=day)).isoformat(),
             predicted_modal_price_per_quintal=round(prediction, 2),
