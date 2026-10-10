@@ -32,7 +32,7 @@ async def ingest_sensor_reading(
 
     payload.batch_id = batch_id
     try:
-        reading_out = MonitoringService.ingest_reading(payload)
+        reading_out = await MonitoringService.ingest_reading(payload)
         return APIResponse(
             success=True,
             message="Sensor measurement ingested and evaluated against verified crop limits.",

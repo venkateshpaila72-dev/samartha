@@ -33,11 +33,15 @@ async def update_notification_preferences(
     payload: NotificationPreferencesUpdate,
     current_user: dict = Depends(get_current_user),
 ):
-    if payload.whatsapp_phone_number and not re.match(E164_REGEX, payload.whatsapp_phone_number):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid phone number format. Must follow E.164 standard (e.g., +919876543210).",
-        )
+    if payload.whatsapp_phone_number:
+        from app.monitoring.rules import normalize_phone_number
+        norm = normalize_phone_number(payload.whatsapp_phone_number)
+        if not norm:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid phone number format. Must follow E.164 standard (e.g., +919876543210).",
+            )
+        payload.whatsapp_phone_number = norm
     from app.repositories.user_repository import UserRepository
     UserRepository.update(
         current_user["id"],
@@ -108,8 +112,12 @@ async def dispatch_whatsapp_alert(
     phone_number: Optional[str] = Query(None, description="Target WhatsApp phone number (admin override only)"),
     current_user: dict = Depends(get_current_user),
 ):
-    """Dispatches a WhatsApp notification via Twilio for a specific alert."""
+    """Dispatches a WhatsApp notification via Twilio for a specific alert using the farmer's registered profile."""
+    from app.integrations.rag_adapter import RAGAdapter
     from app.integrations.whatsapp_client import WhatsAppClient
+    from app.monitoring.rules import mask_phone_number, normalize_phone_number
+    from app.repositories.crop_repository import CropRepository
+    from app.repositories.user_repository import UserRepository
 
     alert = AlertRepository.get_by_id(alert_id)
     if not alert:
@@ -119,43 +127,130 @@ async def dispatch_whatsapp_alert(
     if not batch_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Batch for this alert not found.")
 
-    get_owned_batch(batch_id, current_user)
+    batch = get_owned_batch(batch_id, current_user)
+    owner_id = batch.get("farmer_id") or batch.get("user_id")
+    owner = UserRepository.get_by_id(owner_id) if owner_id else current_user
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
     is_admin = current_user.get("role") == "admin"
     if is_admin and phone_number:
-        target_phone = phone_number.strip()
+        raw_phone = phone_number.strip()
     else:
-        prefs = current_user.get("notification_preferences", {})
-        target_phone = prefs.get("whatsapp_phone_number") or current_user.get("phone_number")
+        prefs = (owner or {}).get("notification_preferences", {})
+        raw_phone = prefs.get("whatsapp_phone_number") or (owner or {}).get("phone_number")
 
-    if not target_phone or not re.match(E164_REGEX, target_phone):
+    normalized_phone = normalize_phone_number(raw_phone)
+    if not normalized_phone:
+        err = f"A valid E.164 phone number (e.g. +919876543210) is required for WhatsApp dispatch. Received: '{raw_phone or ''}'."
+        AlertRepository.update(
+            alert_id,
+            {
+                "whatsapp_notified": False,
+                "whatsapp_delivery_status": "invalid_phone_number" if raw_phone else "missing_phone_number",
+                "whatsapp_last_attempt_at": now_iso,
+                "whatsapp_delivery_error": err,
+                "whatsapp_recipient_masked": mask_phone_number(raw_phone),
+            },
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A valid E.164 phone number (e.g. +919876543210) is required for WhatsApp dispatch.",
+            detail=err,
         )
 
-    success = await WhatsAppClient.send_alert_notification(
-        phone_number=target_phone,
-        crop_name=alert.get("crop_name", "Stored Crop"),
-        condition_type=alert.get("condition_type", "condition"),
-        measured_value=alert.get("measured_value", 0.0),
-        unit=alert.get("unit", ""),
-        recommended_action=alert.get("recommended_action", "Check storage conditions immediately."),
+    # Traditional guidance retrieval
+    crop_profile = CropRepository.get_by_id(batch.get("crop_id", "")) or {}
+    crop_name = alert.get("crop_name") or crop_profile.get("crop_name", "Crop")
+    traditional_guidance = ""
+    try:
+        query = f"{crop_name} traditional preservation {alert.get('condition_type', '')}"
+        rag_refs = RAGAdapter.retrieve_relevant_knowledge(query=query, crop_name=crop_name, top_k=2)
+        if rag_refs:
+            top_r = rag_refs[0]
+            traditional_guidance = f"{top_r.title}: {top_r.content_excerpt}"
+    except Exception:
+        pass
+    if not traditional_guidance:
+        methods = crop_profile.get("traditional_storage_methods") or []
+        if methods:
+            traditional_guidance = methods[0]
+
+    delivery_res = await WhatsAppClient.send_alert_notification(
+        phone_number=normalized_phone,
+        crop_name=crop_name,
+        batch_name=batch.get("custom_batch_name"),
         batch_id=batch_id,
-        preferred_language=current_user.get("preferred_language", "en"),
+        condition_type=alert.get("condition_type", "condition"),
+        severity=alert.get("severity", "warning"),
+        measured_value=alert.get("measured_value", 0.0),
+        unit=alert.get("unit", "°C"),
+        recommended_action=alert.get("recommended_action", "Check storage conditions immediately."),
+        traditional_guidance=traditional_guidance,
+        preferred_language=(owner or {}).get("preferred_language", "en"),
+        target_threshold=alert.get("target_threshold"),
+        target_range_min=alert.get("target_range_min"),
+        target_range_max=alert.get("target_range_max"),
+        alert_id=alert_id,
+        is_sandbox_opted_in=(owner or {}).get("whatsapp_opt_in_completed"),
     )
 
-    if success:
-        AlertRepository.update(alert_id, {"whatsapp_notified": True})
+    AlertRepository.update(
+        alert_id,
+        {
+            "whatsapp_notified": delivery_res.success,
+            "whatsapp_delivery_status": delivery_res.status,
+            "whatsapp_last_attempt_at": now_iso,
+            "whatsapp_delivery_error": delivery_res.error,
+            "whatsapp_recipient_masked": delivery_res.recipient_masked,
+        },
+    )
 
     return APIResponse(
-        success=success,
-        message="WhatsApp notification dispatched via Twilio." if success else "WhatsApp notification failed (check Twilio configuration).",
+        success=delivery_res.success,
+        message="WhatsApp notification dispatched via Twilio." if delivery_res.success else f"WhatsApp notification failed: {delivery_res.error or delivery_res.status}",
         data={
             "alert_id": alert_id,
             "provider": "Twilio",
-            "dispatched": success,
-            "recipient": target_phone[:4] + "****" if len(target_phone) > 4 else "unknown",
+            "dispatched": delivery_res.success,
+            "status": delivery_res.status,
+            "recipient": delivery_res.recipient_masked,
+            "error": delivery_res.error,
         },
     )
+
+
+@router.post("/alerts/twilio-callback")
+async def twilio_status_callback(
+    MessageSid: Optional[str] = Query(None),
+    MessageStatus: Optional[str] = Query(None),
+    ErrorCode: Optional[str] = Query(None),
+    ErrorMessage: Optional[str] = Query(None),
+):
+    """Twilio WhatsApp delivery status callback webhook to distinguish API acceptance from delivery."""
+    from app.db.collection_names import NOTIFICATION_LOGS_COLLECTION, STORAGE_ALERTS_COLLECTION
+    from app.db.mongo import get_db
+
+    if not MessageSid:
+        return {"status": "ignored"}
+
+    status_str = (MessageStatus or "").lower()
+    db = get_db()
+    if db is not None:
+        try:
+            update_fields = {"whatsapp_delivery_status": status_str}
+            if status_str in ("failed", "undelivered"):
+                update_fields["whatsapp_notified"] = False
+                update_fields["whatsapp_delivery_error"] = ErrorMessage or f"Twilio delivery failed (code {ErrorCode})"
+            elif status_str in ("delivered", "read"):
+                update_fields["whatsapp_notified"] = True
+                update_fields["whatsapp_delivery_error"] = None
+
+            # Update notification logs
+            db[NOTIFICATION_LOGS_COLLECTION].update_many(
+                {"message_sid": MessageSid},
+                {"$set": {"status": status_str, "error": ErrorMessage if status_str in ("failed", "undelivered") else None}},
+            )
+        except Exception:
+            pass
+
+    return {"status": "recorded", "message_sid": MessageSid, "delivery_status": status_str}
 

@@ -37,6 +37,9 @@ async def register(payload: UserRegister):
     user_id = f"user_{uuid.uuid4().hex[:10]}"
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+    from app.monitoring.rules import normalize_phone_number
+    norm_phone = normalize_phone_number(payload.phone_number) if payload.phone_number else None
+
     user_doc = {
         "id": user_id,
         "email": payload.email.strip().lower(),
@@ -44,9 +47,10 @@ async def register(payload: UserRegister):
         "full_name": payload.full_name,
         "role": "farmer",
         "preferred_language": payload.preferred_language,
-        "phone_number": payload.phone_number,
+        "phone_number": norm_phone,
         "village_or_location": payload.village_or_location,
         "whatsapp_url": payload.whatsapp_url,
+        "whatsapp_opt_in_completed": payload.whatsapp_opt_in_completed or False,
         "created_at": now_iso,
     }
 
@@ -124,11 +128,15 @@ async def update_profile(
     payload: UserUpdate,
     current_user: dict = Depends(get_current_user),
 ):
+    from app.monitoring.rules import normalize_phone_number
+
     updates = {
         key: value
         for key, value in payload.model_dump().items()
         if value is not None
     }
+    if "phone_number" in updates and updates["phone_number"]:
+        updates["phone_number"] = normalize_phone_number(updates["phone_number"]) or updates["phone_number"]
 
     updated = UserRepository.update(current_user["id"], updates)
 

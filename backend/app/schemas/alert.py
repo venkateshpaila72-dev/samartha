@@ -16,7 +16,14 @@ class StorageAlertOut(BaseModel):
     message: str
     recommended_action: str
     status: str  # active, acknowledged, resolved
+    farmer_id: Optional[str] = None
+    target_range_min: Optional[float] = None
+    target_range_max: Optional[float] = None
     whatsapp_notified: bool = False
+    whatsapp_delivery_status: Optional[str] = "pending"  # pending, accepted, delivered, failed, sandbox_not_opted_in, missing_phone_number, invalid_phone_number
+    whatsapp_recipient_masked: Optional[str] = None
+    whatsapp_last_attempt_at: Optional[str] = None
+    whatsapp_delivery_error: Optional[str] = None
     created_at: str
     resolved_at: Optional[str] = None
 

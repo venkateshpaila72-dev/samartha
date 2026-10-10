@@ -29,6 +29,7 @@ export default function FarmerProfilePage() {
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState({
     full_name: '', phone_number: '', village_or_location: '', preferred_language: 'en',
+    whatsapp_opt_in_completed: false,
   });
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export default function FarmerProfilePage() {
       phone_number: user?.phone_number || '',
       village_or_location: user?.village_or_location || '',
       preferred_language: user?.preferred_language || 'en',
+      whatsapp_opt_in_completed: Boolean(user?.whatsapp_opt_in_completed),
     });
   }, [user]);
 
@@ -51,6 +53,27 @@ export default function FarmerProfilePage() {
 
   const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
+  const toggleOptIn = async (val) => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      await apiRequest('/auth/me', {
+        method: 'PATCH',
+        body: JSON.stringify({ whatsapp_opt_in_completed: val }),
+      });
+      const refreshed = await apiRequest('/auth/me');
+      window.dispatchEvent(new CustomEvent('farmshield:profile-updated', { detail: refreshed.data }));
+      setSuccess(val ? 'WhatsApp Sandbox opt-in marked as completed.' : 'Opt-in status reset.');
+      setForm((cur) => ({ ...cur, whatsapp_opt_in_completed: val }));
+      window.location.reload();
+    } catch (err) {
+      setError(err.message || 'Could not update opt-in status.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveProfile = async (event) => {
     event.preventDefault();
     setSaving(true);
@@ -64,6 +87,7 @@ export default function FarmerProfilePage() {
           phone_number: form.phone_number.trim() || null,
           village_or_location: form.village_or_location.trim() || null,
           preferred_language: form.preferred_language,
+          whatsapp_opt_in_completed: form.whatsapp_opt_in_completed,
         }),
       });
       // apiRequest returns the parsed API response; AuthContext owns the user state.
@@ -125,6 +149,7 @@ export default function FarmerProfilePage() {
             <>
               <ProfileRow icon={<Mail size={17} />} label="Email (cannot be changed here)" value={user?.email || 'Not provided'} />
               <ProfileRow icon={<MessageCircle size={17} />} label="WhatsApp Number" value={user?.phone_number || 'Not provided'} />
+              <ProfileRow icon={<MessageCircle size={17} />} label="WhatsApp Sandbox Status" value={user?.whatsapp_opt_in_completed ? 'Joined (Ready for WhatsApp Alerts)' : 'Opt-in Required (Send join phrase to Twilio)'} />
               <ProfileRow icon={<MapPin size={17} />} label="Village / Location" value={user?.village_or_location || 'Not provided'} />
               <ProfileRow icon={<Languages size={17} />} label="Preferred Language" value={LANGUAGES.find((item) => item.value === user?.preferred_language)?.label || 'English'} />
             </>
@@ -133,12 +158,27 @@ export default function FarmerProfilePage() {
 
         <div className="glass-panel" style={{ padding: '24px', borderRadius: '16px', textAlign: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}><MessageCircle size={20} color="#34d399" /><h2 style={{ margin: 0, fontSize: '1.15rem' }}>WhatsApp Alert Opt-in</h2></div>
+          <div style={{ marginBottom: '12px' }}>
+            <span className={`badge ${user?.whatsapp_opt_in_completed ? 'badge-verified' : 'badge-warning'}`}>
+              {user?.whatsapp_opt_in_completed ? '✓ Sandbox Opt-in Confirmed' : 'Sandbox Opt-in Required Before Alerts'}
+            </span>
+          </div>
           <p style={{ color: '#94a3b8', fontSize: '.86rem', margin: '0 0 18px' }}>Scan this QR to open the configured Twilio WhatsApp sender. WhatsApp will prefill the sandbox join phrase; tap Send to opt in. Alerts can only start after the provider confirms opt-in.</p>
           {whatsappUrl ? (
             <>
               <div style={{ display: 'inline-block', background: '#fff', padding: '14px', borderRadius: '12px' }}><QRCodeSVG value={whatsappUrl} size={210} level="M" includeMargin /></div>
               <a href={whatsappUrl} target="_blank" rel="noreferrer" style={{ display: 'block', color: '#34d399', marginTop: '16px', overflowWrap: 'anywhere', fontSize: '.9rem' }}>{whatsappUrl}</a>
-              <button type="button" className="btn-secondary" onClick={copyUrl} style={{ marginTop: '14px' }}>Copy opt-in link</button>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '14px', flexWrap: 'wrap' }}>
+                <button type="button" className="btn-secondary" onClick={copyUrl}>Copy opt-in link</button>
+                <button
+                  type="button"
+                  className={user?.whatsapp_opt_in_completed ? 'btn-secondary' : 'btn-primary'}
+                  disabled={saving}
+                  onClick={() => toggleOptIn(!user?.whatsapp_opt_in_completed)}
+                >
+                  {user?.whatsapp_opt_in_completed ? 'Mark as Not Opted-in' : '✓ I Have Sent Join Message'}
+                </button>
+              </div>
             </>
           ) : (
             <div style={{ padding: '24px 12px', border: '1px dashed rgba(148,163,184,.35)', borderRadius: '12px', color: '#94a3b8' }}>

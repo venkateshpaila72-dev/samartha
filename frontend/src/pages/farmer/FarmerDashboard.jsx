@@ -13,6 +13,8 @@ import {
   ArrowRight,
   ShieldCheck,
   RefreshCw,
+  MessageSquare,
+  Clock,
 } from 'lucide-react';
 
 export default function FarmerDashboard({ activeBatch, onNavigate }) {
@@ -128,29 +130,107 @@ export default function FarmerDashboard({ activeBatch, onNavigate }) {
           padding: '18px 24px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '10px'
+          gap: '12px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ef4444', fontWeight: '700' }}>
-            <AlertTriangle size={22} />
-            <span>Active Environmental Alerts Detected ({summary.active_alerts.length})</span>
-          </div>
-          {summary.active_alerts.map((al, idx) => (
-            <div key={idx} style={{ background: 'rgba(15, 23, 42, 0.6)', padding: '12px 16px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-              <div>
-                <span style={{ color: '#f87171', fontWeight: '600', marginRight: '8px' }}>
-                  {al.condition_type.replace('_', ' ').toUpperCase()}:
-                </span>
-                <span style={{ color: '#cbd5e1' }}>{al.message}</span>
-              </div>
-              <button
-                className="btn-secondary"
-                style={{ fontSize: '0.8rem', padding: '6px 12px' }}
-                onClick={() => onNavigate('alerts')}
-              >
-                View Action Plan
-              </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ef4444', fontWeight: '700' }}>
+              <AlertTriangle size={22} />
+              <span>Active Storage Violations Detected ({summary.active_alerts.length})</span>
             </div>
-          ))}
+            <span style={{ fontSize: '0.82rem', color: '#cbd5e1' }}>
+              Notifications dispatched automatically to registered farmer profile
+            </span>
+          </div>
+
+          {summary.active_alerts.map((al, idx) => {
+            const isCrit = al.severity === 'critical';
+            const delivStatus = (al.whatsapp_delivery_status || 'pending').toLowerCase();
+            let delivBadgeClass = 'badge-info';
+            let delivBadgeText = 'WhatsApp: PENDING';
+            if (delivStatus === 'delivered') {
+              delivBadgeClass = 'badge-verified';
+              delivBadgeText = 'WhatsApp: DELIVERED';
+            } else if (delivStatus === 'accepted' || delivStatus === 'queued' || delivStatus === 'sent') {
+              delivBadgeClass = 'badge-verified';
+              delivBadgeText = 'WhatsApp: ACCEPTED BY TWILIO';
+            } else if (delivStatus === 'sandbox_not_opted_in') {
+              delivBadgeClass = 'badge-warning';
+              delivBadgeText = 'WhatsApp: SANDBOX OPT-IN REQUIRED';
+            } else if (delivStatus.includes('fail') || delivStatus.includes('invalid') || delivStatus.includes('missing')) {
+              delivBadgeClass = 'badge-critical';
+              delivBadgeText = 'WhatsApp: DELIVERY FAILED';
+            }
+
+            return (
+              <div
+                key={al.alert_id || idx}
+                style={{
+                  background: 'rgba(15, 23, 42, 0.75)',
+                  borderLeft: isCrit ? '4px solid #ef4444' : '4px solid #f59e0b',
+                  padding: '14px 18px',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '10px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                      <span className={`badge ${isCrit ? 'badge-critical' : 'badge-warning'}`}>
+                        {al.condition_type.replace('_', ' ').toUpperCase()}
+                      </span>
+                      <span className={`badge ${delivBadgeClass}`} style={{ fontSize: '0.75rem' }}>
+                        <MessageSquare size={12} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                        {delivBadgeText}
+                      </span>
+                      {al.whatsapp_recipient_masked && (
+                        <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
+                          To: <strong style={{ color: '#cbd5e1' }}>{al.whatsapp_recipient_masked}</strong>
+                        </span>
+                      )}
+                      {al.whatsapp_last_attempt_at && (
+                        <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                          <Clock size={12} style={{ marginRight: '3px', verticalAlign: 'middle' }} />
+                          {new Date(al.whatsapp_last_attempt_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ color: '#f8fafc', fontWeight: '600', fontSize: '0.96rem' }}>
+                      {al.message}
+                    </div>
+                    <div style={{ fontSize: '0.84rem', color: '#94a3b8', marginTop: '4px' }}>
+                      Actual: <strong style={{ color: isCrit ? '#f87171' : '#fbbf24' }}>{al.measured_value}{al.unit || '°C'}</strong>
+                      {al.target_range_min != null && al.target_range_max != null && (
+                        <span> • Safe Limit: <strong style={{ color: '#34d399' }}>{al.target_range_min}{al.unit}–{al.target_range_max}{al.unit}</strong></span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    className="btn-secondary"
+                    style={{ fontSize: '0.82rem', padding: '6px 14px', alignSelf: 'center' }}
+                    onClick={() => onNavigate('alerts')}
+                  >
+                    View Action Plan <ArrowRight size={14} />
+                  </button>
+                </div>
+
+                {al.whatsapp_delivery_error && (
+                  <div style={{
+                    fontSize: '0.8rem',
+                    color: '#fca5a5',
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    borderLeft: '3px solid #ef4444'
+                  }}>
+                    ⚠️ <strong>Delivery Notice:</strong> {al.whatsapp_delivery_error}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

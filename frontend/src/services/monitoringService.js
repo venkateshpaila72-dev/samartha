@@ -35,6 +35,13 @@ export const monitoringService = {
     });
     return res.data;
   },
+
+  async dispatchWhatsAppAlert(alertId) {
+    const res = await apiRequest(`/alerts/${alertId}/dispatch-whatsapp`, {
+      method: 'POST',
+    });
+    return res.data;
+  },
 };
 
 export const diaryService = {

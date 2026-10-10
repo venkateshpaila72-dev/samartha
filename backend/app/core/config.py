@@ -67,6 +67,7 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str = ""
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_WHATSAPP_FROM: str = "whatsapp:+14155238886"
+    TWILIO_WHATSAPP_JOIN_KEYWORD: str = "join building-giant"
     WHATSAPP_API_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: str = ""
