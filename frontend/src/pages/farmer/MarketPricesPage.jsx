@@ -5,9 +5,11 @@ import TranslatedText from '../../components/TranslatedText';
 
 export default function MarketPricesPage({ activeBatch }) {
   const batchCrop = activeBatch?.crop_profile?.crop_name || '';
-  const [cropQuery, setCropQuery] = useState(batchCrop);
-  const [state, setState] = useState(() => localStorage.getItem('farmshield_state') || '');
-  const [district, setDistrict] = useState(() => localStorage.getItem('farmshield_district') || '');
+  const [cropQuery, setCropQuery] = useState(() => {
+    try { return batchCrop || localStorage.getItem('farmshield_selected_crop') || ''; } catch { return batchCrop; }
+  });
+  const [state, setState] = useState(() => { try { return localStorage.getItem('farmshield_state') || ''; } catch { return ''; } });
+  const [district, setDistrict] = useState(() => { try { return localStorage.getItem('farmshield_district') || ''; } catch { return ''; } });
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -52,8 +54,11 @@ export default function MarketPricesPage({ activeBatch }) {
 
   const submit = (event) => {
     event.preventDefault();
-    localStorage.setItem('farmshield_state', state.trim());
-    localStorage.setItem('farmshield_district', district.trim());
+    try {
+      localStorage.setItem('farmshield_selected_crop', cropQuery.trim());
+      localStorage.setItem('farmshield_state', state.trim());
+      localStorage.setItem('farmshield_district', district.trim());
+    } catch { /* The selected values still work for this session when storage is unavailable. */ }
     fetchPrices(cropQuery);
   };
 
