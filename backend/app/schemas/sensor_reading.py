@@ -10,6 +10,9 @@ class SensorReadingCreate(BaseModel):
     relative_humidity_percent: float = Field(ge=0.0, le=100.0, description="Ambient relative humidity in %")
     crop_moisture_percent: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     co2_ppm: Optional[float] = Field(default=None, ge=0.0, le=10000.0)
+    air_velocity_m_s: Optional[float] = Field(default=None, ge=0.0, le=30.0)
+    pressure_kpa: Optional[float] = Field(default=None, ge=50.0, le=120.0)
+    light_lux: Optional[float] = Field(default=None, ge=0.0, le=200000.0)
     sensor_id: str = "manual_entry_01"
     provenance: str = Field(default="manual", pattern="^(hardware_sensor|manual|simulated)$")
     timestamp: Optional[str] = None
@@ -23,6 +26,9 @@ class SensorReadingOut(BaseModel):
     relative_humidity_percent: float
     crop_moisture_percent: Optional[float] = None
     co2_ppm: Optional[float] = None
+    air_velocity_m_s: Optional[float] = None
+    pressure_kpa: Optional[float] = None
+    light_lux: Optional[float] = None
     sensor_id: str
     provenance: str  # hardware_sensor, manual, simulated
     timestamp: str
@@ -37,6 +43,10 @@ class MonitoringSummaryOut(BaseModel):
     current_temperature_c: Optional[float] = None
     current_humidity_percent: Optional[float] = None
     current_moisture_percent: Optional[float] = None
+    current_co2_ppm: Optional[float] = None
+    current_air_velocity_m_s: Optional[float] = None
+    current_pressure_kpa: Optional[float] = None
+    current_light_lux: Optional[float] = None
     target_temperature_min_c: float
     target_temperature_max_c: float
     target_humidity_min_percent: float
