@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies import get_current_user, get_owned_batch
-from app.integrations.market_client import MarketClient
+from app.services.farmshield_agent import FarmShieldAgent
 from app.repositories.crop_repository import CropRepository
 from app.schemas.common import APIResponse
 from app.schemas.market import MarketPriceReportOut
@@ -22,8 +22,9 @@ async def get_market_prices(
     skip: int = Query(0, ge=0),
     current_user: dict = Depends(get_current_user),
 ):
-    report = await MarketClient.get_market_prices(
+    report = await FarmShieldAgent.market_advisory(
         crop_name=crop,
+        language=current_user.get("preferred_language", "en"),
         state=state,
         district=district,
         limit=limit,
@@ -52,8 +53,9 @@ async def get_batch_market_prices(
     if not crop_name:
         raise ValueError("The selected batch does not have a crop assigned.")
 
-    report = await MarketClient.get_market_prices(
+    report = await FarmShieldAgent.market_advisory(
         crop_name=crop_name,
+        language=current_user.get("preferred_language", "en"),
         state=state,
         district=district,
         limit=limit,
