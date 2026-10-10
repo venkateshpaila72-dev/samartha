@@ -107,6 +107,29 @@ export default function MonitoringPage({ activeBatch }) {
         </button>
       </div>
 
+      {/* Latest telemetry from hardware or the HarvestStore simulator */}
+      <div className="glass-panel" style={{ padding: '20px' }}>
+        <h3 style={{ marginTop: 0 }}>Latest Storage Environment Readings</h3>
+        <p style={{ color: '#94a3b8', fontSize: '.85rem' }}>Values below are loaded from the saved backend monitoring summary.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '12px' }}>
+          {[
+            ['Temperature', summary?.current_temperature_c, '°C'],
+            ['Humidity', summary?.current_humidity_percent, '% RH'],
+            ['Crop moisture', summary?.current_moisture_percent, '%'],
+            ['CO₂', summary?.current_co2_ppm, 'ppm'],
+            ['Air velocity', summary?.current_air_velocity_m_s, 'm/s'],
+            ['Pressure', summary?.current_pressure_kpa, 'kPa'],
+            ['Light intensity', summary?.current_light_lux, 'lux'],
+          ].map(([label, value, unit]) => (
+            <div key={label} style={{ padding: '14px', borderRadius: '12px', background: 'rgba(148,163,184,.08)', border: '1px solid rgba(148,163,184,.18)' }}>
+              <div style={{ color: '#94a3b8', fontSize: '.8rem' }}>{label}</div>
+              <div style={{ fontSize: '1.35rem', fontWeight: 700, marginTop: '7px' }}>{value == null ? 'No data' : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })} <small style={{ fontSize: '.75rem', color: '#94a3b8' }}>{value == null ? '' : unit}</small></div>
+            </div>
+          ))}
+        </div>
+        {summary?.reading_provenance && <p style={{ color: '#94a3b8', fontSize: '.78rem', marginBottom: 0 }}>Source: {summary.reading_provenance} · Last reading: {summary.last_reading_time || 'unknown'}</p>}
+      </div>
+
       {/* Ingestion & Simulation Tool */}
       <div className="glass-panel glow-border" style={{ padding: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
