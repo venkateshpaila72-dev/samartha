@@ -133,8 +133,8 @@ class MonitoringService:
                 AlertRepository.create(alert_doc)
 
                 # Auto-dispatch WhatsApp for new critical alerts
-                if v.severity == "critical":
-                    cls._maybe_auto_dispatch_whatsapp(batch, alert_doc)
+                if v.severity in {"warning", "critical"}:
+                    cls._maybe_auto_dispatch_whatsapp(batch, alert_doc, crop_profile)
 
         # Auto-resolve conditions that have recovered back to safe range
         for ea in existing_open:
@@ -146,12 +146,14 @@ class MonitoringService:
         return SensorReadingOut(**reading_doc)
 
     @classmethod
-    def _maybe_auto_dispatch_whatsapp(cls, batch: dict, alert_doc: dict):
+    def _maybe_auto_dispatch_whatsapp(cls, batch: dict, alert_doc: dict, crop_profile: dict | None = None):
         import time
         import re
         import asyncio
         from app.repositories.user_repository import UserRepository
         from app.integrations.whatsapp_client import WhatsAppClient
+        import json
+        from pathlib import Path
 
         batch_id = batch.get("batch_id")
         now = time.time()
@@ -176,6 +178,25 @@ class MonitoringService:
             cls._batch_whatsapp_cooldown = {}
         cls._batch_whatsapp_cooldown[batch_id] = now
 
+        # Select one relevant local traditional-storage reference for the alert.
+        traditional_guidance = ""
+        try:
+            data_path = Path(__file__).resolve().parents[2] / "data" / "traditional_knowledge_rag.json"
+            knowledge = json.loads(data_path.read_text(encoding="utf-8"))
+            crop_name = (crop_profile or {}).get("crop_name", alert_doc.get("crop_name", "")).lower()
+            matches = [
+                item for item in knowledge
+                if crop_name and (
+                    crop_name in item.get("crop_name", "").lower()
+                    or any(word in item.get("crop_name", "").lower() for word in crop_name.split() if len(word) > 3)
+                )
+            ]
+            if matches:
+                item = matches[0]
+                traditional_guidance = f"{item.get('title', 'Traditional storage method')}: {item.get('content', '')}"
+        except Exception:
+            traditional_guidance = ""
+
         async def _send():
             try:
                 success = await WhatsAppClient.send_alert_notification(
@@ -187,6 +208,7 @@ class MonitoringService:
                     recommended_action=alert_doc.get("recommended_action", ""),
                     batch_id=batch_id,
                     preferred_language=owner.get("preferred_language", "en"),
+                    traditional_guidance=traditional_guidance,
                 )
                 if success:
                     AlertRepository.update(alert_doc["alert_id"], {"whatsapp_notified": True})
