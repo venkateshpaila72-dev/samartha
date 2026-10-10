@@ -1,0 +1,72 @@
+[
+  {
+    "id": "rag_trad_001",
+    "crop_category": "Cereals & Grains",
+    "crop_name": "Paddy (Rice)",
+    "title": "Neem Leaf and Kernel Preservation Method for Grain Storage",
+    "content": "Traditional Indian farmers have used dry Azadirachta indica (Neem) leaves mixed with stored paddy at 1.5% to 2.0% w/w ratio for centuries. The active limonoid azadirachtin acts as an antifeedant, insect growth regulator, and repellent against rice weevil (Sitophilus oryzae) and grain moth (Sitotroga cerealella). Leaves must be completely sun-dried until brittle before mixing into grain; green leaves introduce unwanted moisture that triggers mould growth.",
+    "source": "ICAR-IIRR Indigenous Technical Knowledge (ITK) Compendium & CFTRI Mysore",
+    "region": "Pan-India",
+    "tags": ["neem", "paddy", "pest_deterrent", "natural_storage"]
+  },
+  {
+    "id": "rag_trad_002",
+    "crop_category": "Pulses & Legumes",
+    "crop_name": "Chickpea, Pigeon Pea, Green Gram",
+    "title": "Vegetable Oil Smearing Technique Against Pulse Beetle (Callosobruchus)",
+    "content": "Coating pulse seeds with non-drying or semi-drying edible oils (mustard oil, castor oil, or coconut oil) at 3 to 5 ml per kilogram of seed provides up to 9 months of protection against bruchid pulse beetles. The thin lipid layer blocks the respiratory spiracles of adult beetles, prevents oviposition (egg anchoring on seed coats), and suffocates developing embryos beneath the seed coat. The grain remains completely safe for consumption after washing and cooking.",
+    "source": "ICAR Indian Institute of Pulses Research (IIPR) & Journal of Stored Products Research",
+    "region": "Madhya Pradesh, Maharashtra, UP",
+    "tags": ["pulse_beetle", "castor_oil", "mustard_oil", "chickpea", "bruchid"]
+  },
+  {
+    "id": "rag_trad_003",
+    "crop_category": "Cereals & Millets",
+    "crop_name": "Wheat, Millets, Maize",
+    "title": "Pusa Bin Hermetic Earthen Granary Design",
+    "content": "Developed by the Indian Agricultural Research Institute (IARI), the Pusa Bin is an improvement on traditional earthen 'kothis'. It uses an inner and outer brick or mud wall sandwiching a 700-gauge polyethylene film barrier on all sides, top, and floor. The grain inside consumes available oxygen through minimal respiration and releases CO2, creating an anaerobic, moisture-impermeable hermetic environment where insects and fungi cannot survive without requiring chemical fumigation.",
+    "source": "Indian Agricultural Research Institute (IARI), New Delhi",
+    "region": "Northern & Central India",
+    "tags": ["pusa_bin", "hermetic_storage", "iari", "wheat", "maize"]
+  },
+  {
+    "id": "rag_trad_004",
+    "crop_category": "Vegetables & Tubers",
+    "crop_name": "Onion",
+    "title": "Traditional Thatched Ventilated Onion Chawl (Medha System)",
+    "content": "In Maharashtra (Nashik) and Gujarat, Rabi onions are preserved in elevated thatched chawls constructed from bamboo, wire mesh, and sugarcane trash thatch. The structure is oriented perpendicular to prevailing summer winds with slatted bottoms 50-60 cm above the ground. This creates natural thermal buoyancy, drawing cooler ground air through the bulb stacks to prevent heat pockets and keep relative humidity below 72%. Bulbs must have dried, tight necks before stacking.",
+    "source": "ICAR Directorate of Onion and Garlic Research (DOGR), Rajgurunagar",
+    "region": "Western India",
+    "tags": ["onion", "chawl", "natural_ventilation", "sprouting_prevention"]
+  },
+  {
+    "id": "rag_trad_005",
+    "crop_category": "Vegetables & Fruits",
+    "crop_name": "Tomato, Vegetables, Fruits",
+    "title": "Zero Energy Cool Chamber (ZECC) Evaporative Storage",
+    "content": "Invented by IARI scientists, the Zero Energy Cool Chamber (ZECC) is built using a double-brick wall enclosure with a 7.5 cm cavity filled with river sand. The sand is watered twice daily. Natural evaporation of water drops the internal chamber temperature by 8°C to 12°C compared to ambient outdoor dry bulb temperature and maintains high relative humidity (85% to 92%). This dramatically extends the shelf life of fresh tomatoes, leafy vegetables, and fruits without electricity.",
+    "source": "Indian Agricultural Research Institute (IARI) Horticulture Division",
+    "region": "Pan-India",
+    "tags": ["zecc", "evaporative_cooling", "tomato", "fruits", "zero_energy"]
+  },
+  {
+    "id": "rag_trad_006",
+    "crop_category": "Vegetables & Tubers",
+    "crop_name": "Potato",
+    "title": "Village Heap and Sand Bed Suberization Storage",
+    "content": "Before modern cold chains, ware potatoes were kept in dark thatched huts under a dry sand layer or straw blanket. Essential pre-storage condition is suberization: keeping newly harvested tubers at 15-20°C and 90% RH for 10-12 days to heal harvesting cuts and thicken periderm. Darkness is critical to prevent greening and accumulation of bitter glycoalkaloid solanine.",
+    "source": "ICAR Central Potato Research Institute (CPRI), Shimla",
+    "region": "Indo-Gangetic Plains",
+    "tags": ["potato", "suberization", "solanine", "dark_storage"]
+  },
+  {
+    "id": "rag_trad_007",
+    "crop_category": "Pulses & Legumes",
+    "crop_name": "Pulses, Lentils",
+    "title": "Clean River Sand Layering Technique for Earthen Matkas",
+    "content": "In traditional village storage, after pulses are dried to below 10% moisture, they are packed into cleaned earthen pots. A 3-5 cm layer of thoroughly sun-dried, sieved river sand is spread on top before tying the cloth mouth. Pulse beetles emerging from the seed cannot crawl through the fine abrasive sand grains and perish from physical abrasion and suffocation.",
+    "source": "National Bureau of Plant Genetic Resources (NBPGR) Indigenous Technical Knowledge",
+    "region": "Rajasthan, MP, Andhra Pradesh",
+    "tags": ["sand_layer", "earthen_pot", "pulse_storage", "physical_barrier"]
+  }
+]

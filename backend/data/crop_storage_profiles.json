@@ -1,0 +1,736 @@
+[
+  {
+    "crop_id": "paddy_grain_ambient",
+    "crop_name": "Paddy (Rice)",
+    "crop_category": "Cereals & Grains",
+    "variety": "Common / Basmati Varieties",
+    "crop_form": "Threshed Raw Paddy Grain",
+    "region": "Pan-India",
+    "storage_type": "Warehouse / Hermetic Bag / Traditional Bin",
+    "intended_storage_duration": "6 to 12 months",
+    "recommended_temperature_min_c": 15.0,
+    "recommended_temperature_max_c": 25.0,
+    "recommended_relative_humidity_min_percent": 55.0,
+    "recommended_relative_humidity_max_percent": 68.0,
+    "recommended_crop_moisture_percent": 13.0,
+    "moisture_basis": "Wet Basis (w.b.) Maximum Threshold",
+    "additional_parameters": {
+      "co2_threshold_ppm": 1200,
+      "max_grain_moisture_limit_percent": 14.0,
+      "critical_condensation_risk_rh_percent": 75.0
+    },
+    "traditional_storage_methods": [
+      "Pusa Bin (earthen structure with polyethylene film sandwich layer)",
+      "Traditional Morai / Kothi lined with paddy straw and plastered with clay/cow-dung",
+      "Layering with dried neem leaves (Azadirachta indica) at 2% w/w ratio to deter rice weevil (Sitophilus oryzae)",
+      "Solar sun-drying of grain on clean tarpaulins for 2-3 sunny days prior to bagging"
+    ],
+    "ventilation_guidance": "Provide cross-ventilation during dry sunny afternoons (ambient RH < 65%). Close ventilators tightly during night hours, rain spells, or humid mornings to prevent moisture re-absorption.",
+    "pest_prevention_guidance": "Inspect weekly for Rice Weevil (Sitophilus oryzae) and Lesser Grain Borer (Rhyzopertha dominica). Use hermetic GrainPro bags or earthen kothis sealed airtight. Place neem seed kernel powder packets at bag corners.",
+    "spoilage_warning_signs": [
+      "Musty or fermented sour odor indicating fungal respiration",
+      "Grain clumping, caking, or damp crusting on upper bag layers",
+      "Localized temperature rise ('hot spots' > 32°C inside grain mass)",
+      "Presence of insect frass, webbing, or powdery flour"
+    ],
+    "recommended_actions": [
+      "If grain moisture exceeds 14%, immediately unload and sun-dry in thin layers (3-5 cm)",
+      "If grain temperature spikes above 30°C, aerate and rotate bags to break localized hotspots",
+      "Seal storage hermetically if pest emergence is detected in early stages"
+    ],
+    "source_name": "ICAR - Indian Institute of Rice Research (IIRR) & IGGMRI Storage Protocols",
+    "source_url": "https://icar.org.in/",
+    "source_publication_date": "2023-04-15",
+    "applicability_notes": "Applies to raw dry paddy stored in gunny bags, HDPE woven bags, or hermetic bins. Parboiled paddy requires strict moisture < 12.5%.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "wheat_grain_ambient",
+    "crop_name": "Wheat",
+    "crop_category": "Cereals & Grains",
+    "variety": "Durum / Bread Wheat",
+    "crop_form": "Clean Threshed Wheat Grain",
+    "region": "Northern / Central India",
+    "storage_type": "Metallic Silo / Covered Warehouse / Earthen Kothi",
+    "intended_storage_duration": "6 to 12 months",
+    "recommended_temperature_min_c": 15.0,
+    "recommended_temperature_max_c": 22.0,
+    "recommended_relative_humidity_min_percent": 50.0,
+    "recommended_relative_humidity_max_percent": 65.0,
+    "recommended_crop_moisture_percent": 11.5,
+    "moisture_basis": "Wet Basis (w.b.) Safe Storage Target",
+    "additional_parameters": {
+      "max_grain_moisture_limit_percent": 12.0,
+      "khapra_beetle_risk_temp_c": 32.0
+    },
+    "traditional_storage_methods": [
+      "Storage in galvanized corrugated steel bins (PAU/IGGMRI bins) kept on raised wooden dunnage",
+      "Traditional Buhari / Kothi treated with wood ash and dry camphor at bottom",
+      "Admixture of dried wild mint or neem leaves",
+      "Surface layering with clean dry river sand (3-5 cm) to suppress insect movement"
+    ],
+    "ventilation_guidance": "Keep warehouse sealed during monsoon months. Aerate only when ambient temperature and humidity are lower than inside storage (differential aeration).",
+    "pest_prevention_guidance": "Primary risks: Khapra beetle (Trogoderma granarium), Rust-red flour beetle (Tribolium castaneum). Keep godown floor disinfected and bags stacked at least 50 cm away from perimeter walls.",
+    "spoilage_warning_signs": [
+      "Hollowed-out grains with visible emergence holes",
+      "Floury dust accumulation underneath bag stacks",
+      "Rise in temperature inside center of bag piles above 30°C",
+      "Sour rancid odor"
+    ],
+    "recommended_actions": [
+      "Perform solarization by spreading grain under full sunlight on clear tarpaulins for 6 hours",
+      "Segregate infested bags from clean stacks immediately",
+      "Ensure bottom dunnage is dry and free of dampness"
+    ],
+    "source_name": "ICAR - Indian Institute of Wheat and Barley Research (IIWBR)",
+    "source_url": "https://iiwbr.icar.gov.in/",
+    "source_publication_date": "2023-06-10",
+    "applicability_notes": "Mandatory that grain moisture is brought below 12% before bulk bagging; higher moisture triggers rapid mould development and heating.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "maize_grain_ambient",
+    "crop_name": "Maize (Corn)",
+    "crop_category": "Cereals & Grains",
+    "variety": "Yellow / White Dent / Flint",
+    "crop_form": "Shelled Dry Grain",
+    "region": "Pan-India",
+    "storage_type": "Ventilated Warehouse / Hermetic Bags / Cribs",
+    "intended_storage_duration": "4 to 8 months",
+    "recommended_temperature_min_c": 15.0,
+    "recommended_temperature_max_c": 24.0,
+    "recommended_relative_humidity_min_percent": 50.0,
+    "recommended_relative_humidity_max_percent": 65.0,
+    "recommended_crop_moisture_percent": 12.5,
+    "moisture_basis": "Wet Basis (w.b.) Maximum Safe Threshold",
+    "additional_parameters": {
+      "aflatoxin_growth_threshold_rh_percent": 75.0,
+      "max_safe_grain_moisture_percent": 13.0
+    },
+    "traditional_storage_methods": [
+      "Traditional elevated bamboo cribs with slatted floors for natural air drying of cobs",
+      "Hanging cobs under veranda eaves above cooking hearth where smoke repels weevils",
+      "Grain storage in airtight drums with tight rubber gaskets"
+    ],
+    "ventilation_guidance": "Continuous natural air flow required while drying on cob. Once shelled, store dry grain in sealed bags with intermittent aeration only during low RH hours.",
+    "pest_prevention_guidance": "Guard against Maize Weevil (Sitophilus zeamais) and Angoumois Grain Moth (Sitotroga cerealella). Hermetic storage bags drastically reduce oxygen to suppress insects.",
+    "spoilage_warning_signs": [
+      "Greenish-yellow mould dusting (Aspergillus flavus - Aflatoxin indicator)",
+      "Clumping of grains and dampness",
+      "Noticeable ammonia or stale alcohol odor"
+    ],
+    "recommended_actions": [
+      "Discard any visibly mould-damaged or discolored grains; never feed mouldy maize to animals",
+      "Immediate re-drying if grain moisture approaches 13.5%",
+      "Store on raised pallets with rodent barriers"
+    ],
+    "source_name": "ICAR - Indian Institute of Maize Research (IIMR) & FAO Post-Harvest Protocols",
+    "source_url": "https://iimr.icar.gov.in/",
+    "source_publication_date": "2023-01-20",
+    "applicability_notes": "Aflatoxin risk is extremely high in warm, humid climates. Moisture control is critical.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "groundnut_pod_ambient",
+    "crop_name": "Groundnut (Peanut)",
+    "crop_category": "Oilseeds",
+    "variety": "Spanish / Virginia Bunch",
+    "crop_form": "In-Shell Dry Pods",
+    "region": "Gujarat, Andhra Pradesh, Tamil Nadu, Karnataka",
+    "storage_type": "Well-Ventilated Godown / Gunny Bags",
+    "intended_storage_duration": "3 to 6 months",
+    "recommended_temperature_min_c": 12.0,
+    "recommended_temperature_max_c": 20.0,
+    "recommended_relative_humidity_min_percent": 55.0,
+    "recommended_relative_humidity_max_percent": 65.0,
+    "recommended_crop_moisture_percent": 7.5,
+    "moisture_basis": "Pod Moisture w.b. Maximum Limit",
+    "additional_parameters": {
+      "kernel_safe_moisture_percent": 6.5,
+      "aflatoxin_danger_rh_percent": 70.0
+    },
+    "traditional_storage_methods": [
+      "Storing in intact pods rather than shelled kernels (pod shell provides natural barrier)",
+      "Traditional bamboo baskets lined with dried straw and cow-dung wash",
+      "Stacking gunny bags on wooden crates 30 cm above ground",
+      "Thorough sun-drying pods until pods rattle freely when shaken"
+    ],
+    "ventilation_guidance": "Well-ventilated ambient room. Air stagnation combined with humidity causes immediate Aspergillus flavus sporulation producing carcinogenic aflatoxins.",
+    "pest_prevention_guidance": "Key pest: Groundnut Bruchid (Caryedon serratus) and Red Flour Beetle. Keep storage free from cracked or mechanically injured pods. Clean surroundings thoroughly.",
+    "spoilage_warning_signs": [
+      "Yellowish-green powdery mold inside split shells",
+      "Rancid bitter oil taste or pungent smell",
+      "Discoloration of seed coat from pinkish to dark brown/black"
+    ],
+    "recommended_actions": [
+      "Ensure pods are dried to < 8% moisture before storing; shake pods to verify rattling sound",
+      "Isolate stacks that show any moisture condensation or mold smell",
+      "Do not store near moisture sources or open drains"
+    ],
+    "source_name": "ICAR - Directorate of Groundnut Research (DGR), Junagadh",
+    "source_url": "https://dgr.icar.gov.in/",
+    "source_publication_date": "2023-05-18",
+    "applicability_notes": "Always store as dry pods rather than kernels. Kernels lose viability and turn rancid 3x faster.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "chickpea_pulse_ambient",
+    "crop_name": "Chickpea (Gram / Chana)",
+    "crop_category": "Pulses & Legumes",
+    "variety": "Desi / Kabuli Varieties",
+    "crop_form": "Whole Dry Pulse Grain",
+    "region": "Madhya Pradesh, Maharashtra, Rajasthan, UP",
+    "storage_type": "Hermetic Bin / Metal Bin / Lined Gunny Bags",
+    "intended_storage_duration": "6 to 12 months",
+    "recommended_temperature_min_c": 15.0,
+    "recommended_temperature_max_c": 22.0,
+    "recommended_relative_humidity_min_percent": 50.0,
+    "recommended_relative_humidity_max_percent": 60.0,
+    "recommended_crop_moisture_percent": 9.5,
+    "moisture_basis": "Wet Basis (w.b.) Maximum Safe Threshold",
+    "additional_parameters": {
+      "pulse_beetle_favorable_rh_percent": 65.0,
+      "max_safe_pulse_moisture_percent": 10.0
+    },
+    "traditional_storage_methods": [
+      "Smearing seeds with edible oil (mustard, castor, or neem oil at 5ml/kg seed) to prevent pulse beetle egg hatching",
+      "Layering with dry sieved river sand (2-3 cm layer on top of bin)",
+      "Mixing with wood ash (at 1:50 ratio) in earthen pots",
+      "Storage in airtight earthen pots (Matkas) with mouths sealed using cloth and wet clay"
+    ],
+    "ventilation_guidance": "Keep storage airtight if using hermetic methods. If in warehouse, keep humidity strictly below 60% and avoid damp air entry.",
+    "pest_prevention_guidance": "The Pulse Beetle (Callosobruchus chinensis) is devastating. One beetle can cause 80% loss in 3 months. Complete exclusion via hermetic seals or edible vegetable oil coating is highly effective.",
+    "spoilage_warning_signs": [
+      "Circular exit holes ('windows') on grains with white eggs attached to seed coat",
+      "White powdery residue accumulating at container bottom",
+      "Foul sweetish-stale smell",
+      "Grain heating up in localized spots"
+    ],
+    "recommended_actions": [
+      "Solarize infested seeds on hot days for 4-6 hours to kill all life stages of Callosobruchus",
+      "Coat uninfested seed grain with edible vegetable oil (3-5 ml per kg) before bagging",
+      "Seal container airtight; pulse beetles suffocate in low-oxygen environments"
+    ],
+    "source_name": "ICAR - Indian Institute of Pulses Research (IIPR), Kanpur",
+    "source_url": "https://iipr.icar.gov.in/",
+    "source_publication_date": "2023-03-12",
+    "applicability_notes": "Moisture above 10% drastically escalates pulse beetle multiplication and loss of germination vigor.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "redgram_pulse_ambient",
+    "crop_name": "Red Gram / Pigeon Pea (Tur / Arhar)",
+    "crop_category": "Pulses & Legumes",
+    "variety": "UPAS-120, Asha, Maruti Varieties",
+    "crop_form": "Whole Dry Pulse Grain",
+    "region": "Maharashtra, Karnataka, MP, Telangana",
+    "storage_type": "Hermetic Bin / Bag / Earthen Pot",
+    "intended_storage_duration": "6 to 12 months",
+    "recommended_temperature_min_c": 15.0,
+    "recommended_temperature_max_c": 22.0,
+    "recommended_relative_humidity_min_percent": 50.0,
+    "recommended_relative_humidity_max_percent": 60.0,
+    "recommended_crop_moisture_percent": 10.0,
+    "moisture_basis": "Wet Basis (w.b.) Maximum Limit",
+    "additional_parameters": {
+      "bruchid_emergence_threshold_temp_c": 25.0,
+      "max_safe_pulse_moisture_percent": 10.5
+    },
+    "traditional_storage_methods": [
+      "Treatment with castor oil (Ricinus communis) at 5ml/kg seed",
+      "Admixture of powdered sweet flag rhizome (Acorus calamus) at 10g/kg",
+      "Hermetic sealing in thick polythene-lined mud kothi",
+      "Sun-drying for 3 consecutive days to reduce grain moisture below 10%"
+    ],
+    "ventilation_guidance": "Store in dry room away from ground dampness. Avoid air exchange during monsoon to prevent moisture uptake.",
+    "pest_prevention_guidance": "High susceptibility to Callosobruchus maculatus. Pre-storage hygiene is vital. Disinfect old gunny bags with boiling water or solar heating.",
+    "spoilage_warning_signs": [
+      "White insect eggs visible on grain surfaces",
+      "Hollow seed coats and weight loss",
+      "Presence of insect frass and dust"
+    ],
+    "recommended_actions": [
+      "Spread seeds in single layer on sunny clear afternoon to kill pulse beetle larvae",
+      "Transfer to airtight drums or hermetic bags with minimal headspace"
+    ],
+    "source_name": "ICAR - Indian Institute of Pulses Research (IIPR) & ICRISAT",
+    "source_url": "https://iipr.icar.gov.in/",
+    "source_publication_date": "2023-04-05",
+    "applicability_notes": "Applies to whole pulse grain intended for seed or human consumption before splitting into dal.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "greengram_pulse_ambient",
+    "crop_name": "Green Gram (Moong)",
+    "crop_category": "Pulses & Legumes",
+    "variety": "Shiny Green / Dull Green Varieties",
+    "crop_form": "Whole Dry Pulse Grain",
+    "region": "Pan-India",
+    "storage_type": "Hermetic Bin / Bag / Tin Container",
+    "intended_storage_duration": "6 to 9 months",
+    "recommended_temperature_min_c": 15.0,
+    "recommended_temperature_max_c": 22.0,
+    "recommended_relative_humidity_min_percent": 50.0,
+    "recommended_relative_humidity_max_percent": 60.0,
+    "recommended_crop_moisture_percent": 9.0,
+    "moisture_basis": "Wet Basis (w.b.) Target Safe Limit",
+    "additional_parameters": {
+      "bruchid_vulnerability_index": "extremely_high",
+      "max_safe_pulse_moisture_percent": 9.5
+    },
+    "traditional_storage_methods": [
+      "Mustard oil coating (5ml/kg) to form a protective lipid film",
+      "Mixing with dry red chilli powder or turmeric rhizome pieces",
+      "Storage in tin cans with hermetic lids",
+      "Sun-drying on clean polythene sheet"
+    ],
+    "ventilation_guidance": "Hermetically sealed storage is preferred over ventilated open storage due to high bruchid vulnerability.",
+    "pest_prevention_guidance": "Green gram is the most vulnerable pulse to Callosobruchus chinensis. Even 2-3 beetles can ruin an entire sack within 6 weeks.",
+    "spoilage_warning_signs": [
+      "Loss of green luster and dulling of seed coat",
+      "Pin-sized holes on grains",
+      "Clumping due to insect webs"
+    ],
+    "recommended_actions": [
+      "Solarize immediately if any beetle activity is observed",
+      "Store exclusively in airtight containers with oxygen absorbers or dry neem leaf cushion"
+    ],
+    "source_name": "ICAR - Indian Institute of Pulses Research (IIPR)",
+    "source_url": "https://iipr.icar.gov.in/",
+    "source_publication_date": "2023-02-18",
+    "applicability_notes": "Dry to 9% moisture or below. Never store freshly harvested damp moong.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "blackgram_pulse_ambient",
+    "crop_name": "Black Gram (Urad)",
+    "crop_category": "Pulses & Legumes",
+    "variety": "T-9, Pant U-19 Varieties",
+    "crop_form": "Whole Dry Pulse Grain",
+    "region": "Pan-India",
+    "storage_type": "Hermetic Bin / Metal Bin / Bag",
+    "intended_storage_duration": "6 to 9 months",
+    "recommended_temperature_min_c": 15.0,
+    "recommended_temperature_max_c": 22.0,
+    "recommended_relative_humidity_min_percent": 50.0,
+    "recommended_relative_humidity_max_percent": 60.0,
+    "recommended_crop_moisture_percent": 9.5,
+    "moisture_basis": "Wet Basis (w.b.) Maximum Limit",
+    "additional_parameters": {
+      "max_safe_pulse_moisture_percent": 10.0
+    },
+    "traditional_storage_methods": [
+      "Coating with refined castor or gingelly (sesame) oil (4ml/kg)",
+      "Layering with dry wood ash in earthen pots",
+      "Thorough drying in direct sun before bin storage"
+    ],
+    "ventilation_guidance": "Keep in cool, dry storeroom. Close all openings during humid rainy season.",
+    "pest_prevention_guidance": "Bruchild beetle prevention is paramount. Inspect fortnightly.",
+    "spoilage_warning_signs": [
+      "Discoloration of black seed coat to greyish tint",
+      "Insect emergence holes and powder dust",
+      "Moisture absorption feeling soft to touch"
+    ],
+    "recommended_actions": [
+      "Sun dry for 1-2 days if moisture increases above 10%",
+      "Store in sealed plastic drums with tight clamp rings"
+    ],
+    "source_name": "ICAR - Indian Institute of Pulses Research (IIPR)",
+    "source_url": "https://iipr.icar.gov.in/",
+    "source_publication_date": "2023-02-22",
+    "applicability_notes": "Requires low ambient humidity to maintain cookability and hardness.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "soybean_seed_ambient",
+    "crop_name": "Soybean",
+    "crop_category": "Oilseeds & Legumes",
+    "variety": "JS-335, JS-9560, NRC Varieties",
+    "crop_form": "Clean Dry Seed Grain",
+    "region": "Madhya Pradesh, Maharashtra, Rajasthan",
+    "storage_type": "Ventilated Warehouse / Gunny Bags on Pallets",
+    "intended_storage_duration": "3 to 6 months",
+    "recommended_temperature_min_c": 15.0,
+    "recommended_temperature_max_c": 20.0,
+    "recommended_relative_humidity_min_percent": 50.0,
+    "recommended_relative_humidity_max_percent": 60.0,
+    "recommended_crop_moisture_percent": 10.0,
+    "moisture_basis": "Wet Basis (w.b.) Maximum Limit",
+    "additional_parameters": {
+      "max_safe_seed_moisture_percent": 10.5,
+      "free_fatty_acid_rise_temp_c": 25.0
+    },
+    "traditional_storage_methods": [
+      "Stacking gunny bags on wooden dunnage with at least 60 cm alleyways between stacks",
+      "Limiting stack height to no more than 8 bags to prevent seed compression injury and internal heating",
+      "Gentle natural shade drying to preserve delicate seed coat integrity"
+    ],
+    "ventilation_guidance": "Provide continuous gentle cross-ventilation during dry weather. Avoid direct hot dry wind that shatters the fragile seed coat.",
+    "pest_prevention_guidance": "Main damage occurs through mould and Free Fatty Acid (FFA) development rather than weevils. Guard against moisture and high temperatures.",
+    "spoilage_warning_signs": [
+      "Seed coat cracking or wrinkled cotyledons",
+      "Loss of natural cream-yellow seed coat luster, turning brownish",
+      "Rancid odor indicative of lipid oxidation",
+      "Rapid drop in germination rate below 70%"
+    ],
+    "recommended_actions": [
+      "Do not drop or throw bags as seed embryo is easily damaged",
+      "Keep storage temperature below 22°C to prevent oil rancidity",
+      "Never store soybean with moisture > 11%"
+    ],
+    "source_name": "ICAR - Indian Institute of Soybean Research (IISR), Indore",
+    "source_url": "https://iisrindore.icar.gov.in/",
+    "source_publication_date": "2023-05-30",
+    "applicability_notes": "Soybean has high lipid (20%) and protein (40%) content; quality degrades rapidly under high humidity.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "pearl_millet_bajra_ambient",
+    "crop_name": "Pearl Millet (Bajra)",
+    "crop_category": "Millets",
+    "variety": "Pusa, HHB Varieties",
+    "crop_form": "Threshed Clean Grain",
+    "region": "Rajasthan, Gujarat, Haryana, UP",
+    "storage_type": "Dry Metal Silo / Traditional Earthen Kothi",
+    "intended_storage_duration": "6 to 12 months",
+    "recommended_temperature_min_c": 15.0,
+    "recommended_temperature_max_c": 24.0,
+    "recommended_relative_humidity_min_percent": 50.0,
+    "recommended_relative_humidity_max_percent": 65.0,
+    "recommended_crop_moisture_percent": 11.0,
+    "moisture_basis": "Wet Basis (w.b.) Maximum Limit",
+    "additional_parameters": {
+      "fat_lipolysis_risk_moisture_percent": 12.0
+    },
+    "traditional_storage_methods": [
+      "Traditional underground pits (Khatti / Bandha) lined with millet straw and husk",
+      "Earthen pots sealed with clay and dry cow dung plaster",
+      "Admixture of neem and wild tulsi leaves"
+    ],
+    "ventilation_guidance": "Keep dry and airtight. High lipid enzymatic activity causes bitterness if exposed to damp air.",
+    "pest_prevention_guidance": "Rice weevil and red flour beetle. Keep storage clean and dry.",
+    "spoilage_warning_signs": [
+      "Bitter pungent taste indicating lipase enzyme activation",
+      "Grain darkening",
+      "Mouldy musty odor"
+    ],
+    "recommended_actions": [
+      "Sun dry thoroughly before storage",
+      "Store whole grain; do not grind flour until immediate consumption"
+    ],
+    "source_name": "ICAR - Indian Institute of Millets Research (IIMR), Hyderabad",
+    "source_url": "https://millets.res.in/",
+    "source_publication_date": "2023-07-15",
+    "applicability_notes": "Millets possess high natural durability when kept under 11% moisture.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "finger_millet_ragi_ambient",
+    "crop_name": "Finger Millet (Ragi)",
+    "crop_category": "Millets",
+    "variety": "GPU, ML Varieties",
+    "crop_form": "Small Clean Whole Grain",
+    "region": "Karnataka, Tamil Nadu, Andhra Pradesh, Odisha",
+    "storage_type": "Earthen Bin / Metal Bin / Hermetic Container",
+    "intended_storage_duration": "12 to 24 months",
+    "recommended_temperature_min_c": 15.0,
+    "recommended_temperature_max_c": 25.0,
+    "recommended_relative_humidity_min_percent": 50.0,
+    "recommended_relative_humidity_max_percent": 65.0,
+    "recommended_crop_moisture_percent": 10.5,
+    "moisture_basis": "Wet Basis (w.b.) Maximum Limit",
+    "additional_parameters": {
+      "exceptional_shelf_life_notes": "Ragi has natural seed hardness and polyphenols conferring high natural insect resistance"
+    },
+    "traditional_storage_methods": [
+      "Traditional Kanaja / Pathaya (bamboo structure plastered with mud and cow dung)",
+      "Underground granaries lined with straw (Hagevu system in Karnataka)",
+      "Layering with dry vitex (nirgundi) or neem leaves"
+    ],
+    "ventilation_guidance": "Store in sealed dry bins. Very resistant to pests if moisture is maintained below 11%.",
+    "pest_prevention_guidance": "Rarely attacked by weevils due to small grain size and seed coat hardness. Guard against moisture and rodents.",
+    "spoilage_warning_signs": [
+      "Clumping or crusting due to moisture ingress",
+      "Damp earth smell"
+    ],
+    "recommended_actions": [
+      "Periodic inspection of container seals",
+      "Sun dry once a year before monsoon season"
+    ],
+    "source_name": "ICAR - Indian Institute of Millets Research (IIMR) & UAS Bangalore",
+    "source_url": "https://millets.res.in/",
+    "source_publication_date": "2023-07-20",
+    "applicability_notes": "Can be stored for over 2 years under dry traditional conditions without significant nutritional loss.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "onion_bulb_ambient_ventilated",
+    "crop_name": "Onion",
+    "crop_category": "Vegetables & Tubers",
+    "variety": "Rabi Onion (N-53, Agrifound Light Red, Bhima Kiran)",
+    "crop_form": "Cured Whole Bulbs with Dry Neck",
+    "region": "Maharashtra, MP, Karnataka, Gujarat",
+    "storage_type": "Ventilated Thatched Structure (Chawl / Medha)",
+    "intended_storage_duration": "3 to 5 months",
+    "recommended_temperature_min_c": 25.0,
+    "recommended_temperature_max_c": 30.0,
+    "recommended_relative_humidity_min_percent": 65.0,
+    "recommended_relative_humidity_max_percent": 72.0,
+    "recommended_crop_moisture_percent": 14.0,
+    "moisture_basis": "Outer Dry Scale Neck Moisture Max %",
+    "additional_parameters": {
+      "sprouting_trigger_temp_range_c": "10.0 to 18.0",
+      "rooting_trigger_rh_percent": 75.0,
+      "max_pile_depth_meters": 0.9
+    },
+    "traditional_storage_methods": [
+      "Traditional two-tier or three-tier bottom-ventilated bamboo structures (Kanda Chawl) with asbestos or thatched grass roof",
+      "Spreading bulbs on raised slatted wooden or bamboo platforms (50-60 cm above ground) to ensure continuous airflow from below",
+      "Thorough field-curing followed by shade-curing for 10-15 days until neck is tight and outer 2-3 scales are papery dry",
+      "Sorting and discarding all thick-neck ('bolters'), twin, or damaged bulbs before loading"
+    ],
+    "ventilation_guidance": "Continuous bottom-to-top natural draft ventilation is MANDATORY. High relative humidity (> 75%) causes rapid root emergence and black mould. Low humidity (< 60%) causes severe desiccation weight loss.",
+    "pest_prevention_guidance": "Protect from Onion Thrips and Black Mould (Aspergillus niger). Clean structure walls and spray neem-based repellent on structure perimeter before storage.",
+    "spoilage_warning_signs": [
+      "Softening or depression around the neck ('Neck Rot')",
+      "Black powdery spores under the outer dry papery scales (Aspergillus niger)",
+      "Green shoot tips emerging from the center (Sprouting)",
+      "White root button emergence at base plate due to excessive humidity (>75% RH)",
+      "Strong pungent ammoniacal decay odor"
+    ],
+    "recommended_actions": [
+      "Never store Kharif onions for long duration; only Rabi harvest with thin tight necks can be stored",
+      "If humidity rises above 75%, run exhaust fans or increase bottom airflow to strip moisture",
+      "Remove decaying or soft bulbs immediately to prevent contact rotting of adjacent healthy bulbs"
+    ],
+    "source_name": "ICAR - Directorate of Onion and Garlic Research (DOGR), Rajgurunagar & NHB Guidelines",
+    "source_url": "https://dogr.icar.gov.in/",
+    "source_publication_date": "2023-04-22",
+    "applicability_notes": "Applies strictly to well-cured Rabi season crop. In cold storage, conditions are 0-2°C with 65-70% RH; intermediate temperatures (12-18°C) cause disastrous sprouting.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "potato_ware_cold_storage",
+    "crop_name": "Potato",
+    "crop_category": "Vegetables & Tubers",
+    "variety": "Kufri Jyoti, Kufri Pukhraj, Kufri Bahar, Kufri Chipsona",
+    "crop_form": "Cured Firm Tubers",
+    "region": "UP, West Bengal, Bihar, Punjab, Gujarat",
+    "storage_type": "Commercial Cold Storage / Evaporative Pit",
+    "intended_storage_duration": "4 to 8 months",
+    "recommended_temperature_min_c": 8.0,
+    "recommended_temperature_max_c": 10.0,
+    "recommended_relative_humidity_min_percent": 88.0,
+    "recommended_relative_humidity_max_percent": 94.0,
+    "recommended_crop_moisture_percent": 78.0,
+    "moisture_basis": "Fresh Tuber Moisture (Internal)",
+    "additional_parameters": {
+      "co2_limit_ppm": 2000,
+      "seed_potato_storage_temp_c": "2.0 to 4.0",
+      "processing_potato_storage_temp_c": "10.0 to 12.0 with CIPC sprout suppressant",
+      "solanine_greening_risk": "high_when_exposed_to_light"
+    },
+    "traditional_storage_methods": [
+      "Traditional heap/pit storage in cool shaded areas covered with thick dry straw (Kuttal/Khad system)",
+      "Pre-storage curing at 15-20°C and 90% RH for 10-14 days to promote suberization (wound healing of skin)",
+      "Complete darkness to prevent chlorophyll and toxic glycoalkaloid (solanine) synthesis",
+      "Sprinkling with dry sand layers in short-term village storage"
+    ],
+    "ventilation_guidance": "Cold stores require periodic fresh air flushing to keep CO2 levels below 2000-2500 ppm; CO2 accumulation causes internal black heart necrosis.",
+    "pest_prevention_guidance": "Primary risks: Potato Tuber Moth (Phthorimaea operculella), Soft rot (Pectobacterium), Dry rot (Fusarium). Cover heaps with 5 cm layer of dry Lantana or Eucalyptus leaves to deter tuber moth.",
+    "spoilage_warning_signs": [
+      "Skin turning green on light exposure (Solanine build-up)",
+      "Soft watery lesions leaking fluid with foul odor (Bacterial Soft Rot)",
+      "Dry sunken shriveled dark spots (Fusarium Dry Rot)",
+      "Internal black or brown discoloration ('Black Heart') due to poor aeration",
+      "Sprout growth longer than 1 cm"
+    ],
+    "recommended_actions": [
+      "Ensure curing period (suberization) is completed prior to lowering temperatures",
+      "Never expose potatoes to light during storage",
+      "Maintain relative humidity above 88% to avoid tuber shriveling, but prevent water droplets dripping from ceiling onto tubers"
+    ],
+    "source_name": "ICAR - Central Potato Research Institute (CPRI), Shimla",
+    "source_url": "https://cpri.icar.gov.in/",
+    "source_publication_date": "2023-03-30",
+    "applicability_notes": "Ware/table potatoes stored at 8-10°C prevent cold-induced sweetening. Seed potatoes are kept colder at 2-4°C.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "tomato_fresh_cool_storage",
+    "crop_name": "Tomato",
+    "crop_category": "Fruits & Vegetables",
+    "variety": "Determinate / Semi-determinate Hybrids",
+    "crop_form": "Mature Green / Turning (Breaker Stage)",
+    "region": "Andhra Pradesh, MP, Karnataka, Odisha, Maharashtra",
+    "storage_type": "Zero Energy Cool Chamber (ZECC) / Cold Room",
+    "intended_storage_duration": "2 to 4 weeks",
+    "recommended_temperature_min_c": 12.0,
+    "recommended_temperature_max_c": 15.0,
+    "recommended_relative_humidity_min_percent": 85.0,
+    "recommended_relative_humidity_max_percent": 92.0,
+    "recommended_crop_moisture_percent": 93.0,
+    "moisture_basis": "Fresh Fruit Internal Water Content",
+    "additional_parameters": {
+      "chilling_injury_temp_threshold_c": 10.0,
+      "ripe_red_stage_temp_c": "8.0 to 10.0",
+      "ethylene_sensitivity": "high"
+    },
+    "traditional_storage_methods": [
+      "Zero Energy Cool Chamber (ZECC) based on evaporative cooling with double-brick walls filled with wet river sand (lowers temp by 8-10°C and maintains RH > 85%)",
+      "Storing mature green fruit on raised slatted wooden crates lined with dry newspaper sheets",
+      "Stem-end down orientation to reduce moisture loss and mechanical pressure"
+    ],
+    "ventilation_guidance": "Moderate continuous ventilation required to dissipate accumulated ethylene gas which accelerates premature ripening and senescence.",
+    "pest_prevention_guidance": "Protect from fruit flies, Alternaria rot, and Rhizopus soft rot. Handle gently during harvest to avoid skin punctures or bruising.",
+    "spoilage_warning_signs": [
+      "Surface pitting, uneven color development, and failure to ripen when brought to room temp (Chilling Injury caused by temperatures < 10°C)",
+      "Water-soaked circular soft spots with grey-black mold (Alternaria Rot)",
+      "Wrinkling and loss of skin turgidity"
+    ],
+    "recommended_actions": [
+      "NEVER store mature green tomatoes below 10°C as irreversible chilling injury occurs",
+      "Keep turning/breaker tomatoes segregated from fully ripe red tomatoes",
+      "Replenish sand moisture daily if using Zero Energy Cool Chambers"
+    ],
+    "source_name": "ICAR - Indian Institute of Horticultural Research (IIHR), Bengaluru & National Horticulture Board",
+    "source_url": "https://iihr.icar.gov.in/",
+    "source_publication_date": "2023-05-12",
+    "applicability_notes": "Harvest at breaker or turning stage for storage; fully red ripe tomatoes have only 4-7 days shelf life.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "mango_fresh_cold_storage",
+    "crop_name": "Mango",
+    "crop_category": "Fruits & Orchard",
+    "variety": "Alphonso, Dasheri, Kesar, Banganapalli, Totapuri",
+    "crop_form": "Mature Hard Green Fruit with Intact Pedicel",
+    "region": "Maharashtra, UP, Gujarat, AP, Karnataka",
+    "storage_type": "Packhouse Cold Storage / Controlled Atmosphere",
+    "intended_storage_duration": "3 to 5 weeks",
+    "recommended_temperature_min_c": 12.0,
+    "recommended_temperature_max_c": 13.5,
+    "recommended_relative_humidity_min_percent": 85.0,
+    "recommended_relative_humidity_max_percent": 90.0,
+    "recommended_crop_moisture_percent": 82.0,
+    "moisture_basis": "Fresh Fruit Internal Water Content",
+    "additional_parameters": {
+      "chilling_injury_danger_temp_c": 10.0,
+      "hot_water_treatment_temp_c": 52.0,
+      "hot_water_treatment_duration_mins": 5
+    },
+    "traditional_storage_methods": [
+      "Harvesting early morning with 8-10 mm pedicel intact to prevent latex sap burn on fruit skin",
+      "Traditional ripening / short storage in wooden boxes padded with dry paddy straw or wheat straw",
+      "Hot water treatment (52°C for 5 minutes) to eradicate latent Anthracnose and stem-end rot fungal spores",
+      "Desapping on specialized wash tables"
+    ],
+    "ventilation_guidance": "Cold stores require adequate air circulation (0.1 to 0.2 m/s) with ethylene scrubbing. Ethylene build-up triggers rapid softening.",
+    "pest_prevention_guidance": "Guarding against Fruit Fly (Bactrocera dorsalis) and Anthracnose (Colletotrichum gloeosporioides). Use corrugated fiberboard (CFB) boxes with individual fruit paper wraps.",
+    "spoilage_warning_signs": [
+      "Skin browning, dark scalding pits, and uneven blotchy ripening (Chilling Injury from temperatures < 11°C)",
+      "Dark tear-stain lesions or black sunken spots with pink spore masses (Anthracnose)",
+      "Softening at the stem end with sour vinous odor (Stem End Rot)"
+    ],
+    "recommended_actions": [
+      "Never set cold storage below 11.5°C for green mature mangoes",
+      "Dip fruits in warm water (52°C for 5 minutes) before packaging to control anthracnose",
+      "Ventilate storage room periodically to purge ethylene"
+    ],
+    "source_name": "ICAR - Central Institute for Subtropical Horticulture (CISH), Lucknow & APEDA Guidelines",
+    "source_url": "https://cish.icar.gov.in/",
+    "source_publication_date": "2023-04-10",
+    "applicability_notes": "Chilling injury is catastrophic below 10°C. Ripening temperature is 20-22°C with 85% RH.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  },
+  {
+    "crop_id": "banana_green_cool_storage",
+    "crop_name": "Banana",
+    "crop_category": "Fruits & Orchard",
+    "variety": "Grand Naine (G9), Robusta, Dwarf Cavendish",
+    "crop_form": "Dehanded Green Mature Fingers (3/4 Full)",
+    "region": "Tamil Nadu, Maharashtra, Gujarat, AP",
+    "storage_type": "Cold Room / Refrigerated Van",
+    "intended_storage_duration": "3 to 4 weeks",
+    "recommended_temperature_min_c": 13.0,
+    "recommended_temperature_max_c": 14.5,
+    "recommended_relative_humidity_min_percent": 90.0,
+    "recommended_relative_humidity_max_percent": 95.0,
+    "recommended_crop_moisture_percent": 75.0,
+    "moisture_basis": "Fresh Pulp Moisture Content",
+    "additional_parameters": {
+      "irreversible_chilling_injury_temp_c": 12.0,
+      "ethylene_sensitivity": "extreme"
+    },
+    "traditional_storage_methods": [
+      "Harvesting bunches at 75-80% maturity; washing hands in alum water (1%) to coagulate latex",
+      "Packing in polythene bags (poly-bags with micro-perforations) inside CFB cartons",
+      "Traditional short storage in cool damp earthen cellars hanging bunches by nylon cords"
+    ],
+    "ventilation_guidance": "Continuous gentle air circulation with complete ethylene scrubbers. Even 0.1 ppm ethylene triggers irreversible ripening.",
+    "pest_prevention_guidance": "Crown rot complex (Fusarium, Colletotrichum). Cut hands cleanly with curved dehanding knife and disinfect crown cut with alum paste.",
+    "spoilage_warning_signs": [
+      "Dull smoky or grayish peel discoloration that fails to turn bright yellow upon ripening (Chilling Injury from temp < 12°C)",
+      "Blackening and fungal decay of the crown cut (Crown Rot)",
+      "Premature finger drop from the crown"
+    ],
+    "recommended_actions": [
+      "Strictly enforce minimum 13.0°C temperature floor; never store in standard household fridges",
+      "Ensure Relative Humidity stays above 90% to prevent finger neck shrinkage and dehydration",
+      "Isolate yellow ripening fruits immediately from green storage batches"
+    ],
+    "source_name": "ICAR - National Research Centre for Banana (NRCB), Tiruchirappalli",
+    "source_url": "https://nrcb.icar.gov.in/",
+    "source_publication_date": "2023-06-25",
+    "applicability_notes": "Extremely susceptible to chilling injury. Cold storage must never dip below 12.5°C.",
+    "verification_status": "verified",
+    "confidence_or_evidence_status": "high_scientific_consensus",
+    "version": 1,
+    "is_active": true
+  }
+]

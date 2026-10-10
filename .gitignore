@@ -218,3 +218,21 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Frontend dependencies and generated files
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Local editor and operating system files
+.vscode/
+.DS_Store
+Thumbs.db
