@@ -43,7 +43,11 @@ export default function MonitoringPage({ activeBatch }) {
 
   useEffect(() => {
     loadData();
-  }, [activeBatch]);
+    if (!activeBatch) return undefined;
+    // Keep the dashboard in sync with simulator/hardware writes made by other clients.
+    const timer = window.setInterval(loadData, 5000);
+    return () => window.clearInterval(timer);
+  }, [activeBatch?.batch_id]);
 
   const handleIngest = async (e) => {
     e.preventDefault();
@@ -240,8 +244,12 @@ export default function MonitoringPage({ activeBatch }) {
                         {r.relative_humidity_percent}%
                       </td>
                       <td style={{ padding: '12px 14px', color: '#cbd5e1' }}>
-                        {r.crop_moisture_percent ? `${r.crop_moisture_percent}%` : '--'}
+                        {r.crop_moisture_percent != null ? `${r.crop_moisture_percent}%` : '--'}
                       </td>
+                      <td style={{ padding: '12px 14px', color: '#cbd5e1' }}>{r.co2_ppm != null ? `${r.co2_ppm} ppm` : '--'}</td>
+                      <td style={{ padding: '12px 14px', color: '#cbd5e1' }}>{r.air_velocity_m_s != null ? `${r.air_velocity_m_s} m/s` : '--'}</td>
+                      <td style={{ padding: '12px 14px', color: '#cbd5e1' }}>{r.pressure_kpa != null ? `${r.pressure_kpa} kPa` : '--'}</td>
+                      <td style={{ padding: '12px 14px', color: '#cbd5e1' }}>{r.light_lux != null ? `${r.light_lux} lux` : '--'}</td>
                       <td style={{ padding: '12px 14px' }}>
                         <span className="badge badge-info" style={{ fontSize: '0.7rem' }}>
                           {r.provenance}
