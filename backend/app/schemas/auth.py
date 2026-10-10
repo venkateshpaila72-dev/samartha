@@ -10,7 +10,7 @@ class UserRegister(BaseModel):
     email: str = Field(pattern=EMAIL_PATTERN, description="Valid email address")
     password: str = Field(min_length=6, description="Password with minimum 6 characters")
     full_name: str = Field(min_length=2)
-    preferred_language: str = Field(default="en")
+    preferred_language: str = Field(default="en", pattern="^(en|hi|te|ta|kn|mr|pa|bn)$")
     phone_number: Optional[str] = None
     village_or_location: Optional[str] = None
 
@@ -40,7 +40,7 @@ class UserOut(BaseModel):
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
-    preferred_language: Optional[str] = None
+    preferred_language: Optional[str] = Field(default=None, pattern="^(en|hi|te|ta|kn|mr|pa|bn)$")
     phone_number: Optional[str] = None
     village_or_location: Optional[str] = None
 

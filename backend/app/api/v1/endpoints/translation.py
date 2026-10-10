@@ -13,7 +13,7 @@ router = APIRouter(tags=["Translation"])
 class TranslationRequest(BaseModel):
     text: str = Field(min_length=1)
     target_language: str = Field(pattern="^(hi|te|ta|kn|mr|bn|pa|en)$")
-    source_language: str = "en"
+    source_language: str = Field(default="en", pattern="^(hi|te|ta|kn|mr|bn|pa|en)$")
 
 
 class TranslationResponse(BaseModel):
