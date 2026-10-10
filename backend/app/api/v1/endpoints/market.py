@@ -1,14 +1,17 @@
 """Agricultural Market Price Endpoints."""
 
 from typing import Optional
+import hmac
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 from app.api.dependencies import get_current_user, get_owned_batch
 from app.services.farmshield_agent import FarmShieldAgent
 from app.repositories.crop_repository import CropRepository
 from app.schemas.common import APIResponse
 from app.schemas.market import MarketPriceReportOut
+from app.core.config import settings
+from app.integrations.market_ingestion_client import sync_market_prices
 
 router = APIRouter(tags=["Market Prices"])
 
@@ -66,3 +69,40 @@ async def get_batch_market_prices(
         message="Batch crop market-price lookup completed.",
         data=report,
     )
+
+
+@router.post("/market/sync", tags=["Market Prices"])
+async def sync_market_data(
+    crop: Optional[str] = Query(None, min_length=1, max_length=100),
+    state: Optional[str] = Query(None, max_length=100),
+    district: Optional[str] = Query(None, max_length=100),
+    max_pages: int = Query(10, ge=1, le=100),
+    sync_secret: Optional[str] = Header(None, alias="X-Market-Sync-Secret"),
+):
+    """Authenticated ingestion hook for a daily scheduler (e.g. GitHub Actions).
+
+    Keep the sync secret in deployment secrets; never expose it in the frontend.
+    """
+    configured_secret = settings.MARKET_SYNC_SECRET.strip()
+    if not configured_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Market sync is disabled because MARKET_SYNC_SECRET is not configured.",
+        )
+    if not sync_secret or not hmac.compare_digest(sync_secret, configured_secret):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid market sync secret.")
+    try:
+        result = await sync_market_prices(
+            crop=crop, state=state, district=district, max_pages=max_pages
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except Exception as exc:
+        # Do not leak provider responses, API keys, or request URLs into the client response.
+        import logging
+        logging.getLogger(__name__).exception("Scheduled market-price ingestion failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Market provider ingestion failed. Check backend logs for the provider error.",
+        ) from exc
+    return {"success": True, "message": "Market-data ingestion completed.", "data": result}
