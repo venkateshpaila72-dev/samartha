@@ -118,7 +118,7 @@ class MarketClient:
             return cls._unavailable("", timestamp, "Select a crop to view market prices.")
         db = get_db()
         if db is None:
-            return cls._unavailable(crop, timestamp, "Market-price storage is unavailable. Please try again later.")
+            return cls._unavailable(crop, timestamp, "No stored market-price records can be queried because market-price storage is unavailable. Please try again later.")
 
         crop_pattern = {"$regex": f"^{re.escape(crop)}$", "$options": "i"}
         query: dict[str, Any] = {"$or": [
