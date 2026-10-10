@@ -46,16 +46,19 @@ class AIContextBuilder:
         user_id: str,
         batch_id: Optional[str],
         user_query: str,
+        language: Optional[str] = None,
     ) -> dict[str, Any]:
         user_doc = UserRepository.get_by_id(user_id) or {}
         is_greeting = is_simple_greeting(user_query)
+        selected_lang = (language or user_doc.get("preferred_language") or "en").lower().split("-")[0]
 
         context: dict[str, Any] = {
             "is_greeting": is_greeting,
+            "preferred_language": selected_lang,
             "farmer_profile": {
                 "name": user_doc.get("full_name", "Farmer"),
                 "location": user_doc.get("village_or_location", "Farm"),
-                "preferred_language": user_doc.get("preferred_language", "en"),
+                "preferred_language": selected_lang,
             },
             "has_batch_context": False,
             "crop_profile": None,

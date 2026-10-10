@@ -76,9 +76,37 @@ class GroqClient:
                         ctx_lines.append(f"Verified Agricultural Reference: {src.title} — {src.content_excerpt}")
 
                 full_context_str = "\n".join(ctx_lines)
+
+                # Determine requested language
+                user_lang = (
+                    context_data.get("preferred_language")
+                    or f_prof.get("preferred_language")
+                    or "en"
+                ).lower().split("-")[0]
+
+                lang_names = {
+                    "te": "Telugu (తెలుగు)",
+                    "hi": "Hindi (हिंदी)",
+                    "ta": "Tamil (தமிழ்)",
+                    "kn": "Kannada (ಕನ್ನಡ)",
+                    "mr": "Marathi (मराठी)",
+                    "pa": "Punjabi (ਪੰਜਾਬੀ)",
+                    "bn": "Bengali (বাংলা)",
+                    "gu": "Gujarati (ગુજરાતી)",
+                    "en": "English",
+                }
+                target_lang_name = lang_names.get(user_lang, "English")
+
+                lang_directive = (
+                    f"CRITICAL LANGUAGE INSTRUCTION: The farmer has explicitly selected {target_lang_name} on the website. "
+                    f"You MUST generate your entire response in natural, fluent {target_lang_name}. "
+                    f"Do NOT answer in English unless the selected language is English."
+                    if user_lang != "en" else "Language: English."
+                )
+
                 messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Verified Farm Data:\n{full_context_str}\n\nFarmer Query: {user_message}"},
+                    {"role": "system", "content": f"{system_prompt}\n\n{lang_directive}"},
+                    {"role": "user", "content": f"Verified Farm Data:\n{full_context_str}\n\n{lang_directive}\n\nFarmer Query: {user_message}"},
                 ]
 
                 async with httpx.AsyncClient(timeout=30.0) as client:
@@ -104,10 +132,20 @@ class GroqClient:
                 logger.error(f"Error calling Groq API: {e}")
 
         # Intelligent Fallback Advisor based on assembled context
+        f_profile = context_data.get("farmer_profile") or {}
+        user_lang = (
+            context_data.get("preferred_language")
+            or f_profile.get("preferred_language")
+            or "en"
+        ).lower().split("-")[0]
+
         if context_data.get("is_greeting"):
-            f_profile = context_data.get("farmer_profile") or {}
             f_name = f_profile.get("name")
             name_greet = f", {f_name}" if f_name and f_name != "Farmer" else ""
+            if user_lang == "te":
+                return f"నమస్కారం{name_greet}! 🙏 మీ వ్యవసాయం ఎలా సాగుతోంది? నేను మీ పంట నిల్వ ఉష్ణోగ్రత, వాతావరణం, మార్కెట్ ధరలు లేదా పంటకోత ప్రణాళికల గురించి సహాయపడగలను.", False
+            elif user_lang == "hi":
+                return f"नमस्ते{name_greet}! 🙏 आपका खेत कैसा है? मैं आपकी फसल भंडारण, मौसम, मंडी भाव या कटाई योजना में मदद कर सकता हूँ।", False
             return f"Hello{name_greet}! 👋 How is your farm doing today? I can help you check your crop storage, weather, market prices, or harvesting plans.", False
 
         q_lower = user_message.lower()
@@ -128,21 +166,38 @@ class GroqClient:
             seven_day = w_data.get("seven_day_forecast") or []
             rain_risk = any(d.get("rain_prob_percent", 0) > 40 for d in seven_day[:3])
 
-            rec_text = "Favorable operational window for drying and field activities over the next 48 hours." if not rain_risk else "Postpone sun-drying and outdoor handling due to elevated rain probability in the upcoming forecast."
-            lines = [
-                f"**Recommendation:** {rec_text}",
-                "",
-                f"**Why:** Current conditions in {loc} report **{curr_temp}°C**, **{curr_rh}% relative humidity**, and **{cond}**.",
-                "",
-                f"**What to do next:**",
-                f"1. Check 7-day rain probability before starting combine harvesting or open-air sun drying.",
-                f"2. Ventilate storage structures during dry afternoon hours (12 PM–3 PM) when outdoor humidity is lowest.",
-                f"3. Cover transport vehicles and keep tarpaulins ready in case of localized showers.",
-                "",
-                f"**Risks to consider:** Ambient relative humidity above 70% increases grain moisture absorption and accelerates fungal spore germination.",
-                "",
-                f"**Data used:** Open-Meteo 7-day meteorological forecast for {loc}.",
-            ]
+            if user_lang == "te":
+                rec_text = "రాబోయే 48 గంటల్లో ధాన్యం ఆరబెట్టడం మరియు వ్యవసాయ పనులకు అనుకూల వాతావరణం ఉంది." if not rain_risk else "రాబోయే రోజుల్లో వర్ష సూచన ఉన్నందున ఆరుబయట ధాన్యం ఆరబెట్టడం వాయిదా వేయండి."
+                lines = [
+                    f"**Recommendation:** {rec_text}",
+                    "",
+                    f"**Why:** {loc} లో ప్రస్తుత వాతావరణం **{curr_temp}°C**, **{curr_rh}% సాపేక్ష తేమ**, మరియు **{cond}** నమోదు అయింది.",
+                    "",
+                    f"**What to do next:**",
+                    f"1. పంటకోత లేదా ఆరబెట్టే ముందు 7 రోజుల వర్ష సూచనను తనిఖీ చేయండి.",
+                    f"2. మధ్యాహ్నం వేళల్లో (12 PM–3 PM) బాహ్య తేమ తక్కువగా ఉన్నప్పుడు గోదాం వెంటిలేషన్ చేయండి.",
+                    f"3. వర్షం పడే అవకాశం ఉన్నందున రవాణా వాహనాలపై టార్పాలిన్లను కప్పండి.",
+                    "",
+                    f"**Risks to consider:** వాతావరణ తేమ 70% కంటే ఎక్కువైతే ధాన్యం తేమను పీల్చుకుని బూజు పట్టే ప్రమాదం ఉంది.",
+                    "",
+                    f"**Data used:** ఓపెన్-మెటియో 7 రోజుల వాతావరణ సూచన ({loc}).",
+                ]
+            else:
+                rec_text = "Favorable operational window for drying and field activities over the next 48 hours." if not rain_risk else "Postpone sun-drying and outdoor handling due to elevated rain probability in the upcoming forecast."
+                lines = [
+                    f"**Recommendation:** {rec_text}",
+                    "",
+                    f"**Why:** Current conditions in {loc} report **{curr_temp}°C**, **{curr_rh}% relative humidity**, and **{cond}**.",
+                    "",
+                    f"**What to do next:**",
+                    f"1. Check 7-day rain probability before starting combine harvesting or open-air sun drying.",
+                    f"2. Ventilate storage structures during dry afternoon hours (12 PM–3 PM) when outdoor humidity is lowest.",
+                    f"3. Cover transport vehicles and keep tarpaulins ready in case of localized showers.",
+                    "",
+                    f"**Risks to consider:** Ambient relative humidity above 70% increases grain moisture absorption and accelerates fungal spore germination.",
+                    "",
+                    f"**Data used:** Open-Meteo 7-day meteorological forecast for {loc}.",
+                ]
             return "\n".join(lines), False
 
         # 2. Market Prices & Selling Recommendations Intent
@@ -155,20 +210,36 @@ class GroqClient:
             top_price = ranked[0].get("modal_price_per_quintal") if ranked else avg_price
 
             decision = sell_rec.get("decision_summary") or ("Consider selling today at highest-paying nearby mandi" if trend != "rising" else "Consider holding for upcoming 3–5 days")
-            lines = [
-                f"**Recommendation:** {decision}",
-                "",
-                f"**Why:** Stored APMC mandi observations for {crop_name} indicate an average modal price of **₹{avg_price:,.0f} / quintal** with a **{trend}** price trend. Top alternative: **{top_mandi}** at **₹{top_price:,.0f} / qtl**.",
-                "",
-                f"**What to do next:**",
-                f"1. Compare net return after deducting local transport costs (approx. ₹1.50/qtl/km) before dispatching lot.",
-                f"2. Inspect stored grain moisture: ensure moisture is strictly below safe threshold ({crop_prof.get('safe_moisture_percent', 12)}%) before hauling.",
-                f"3. Avoid selling on unverified credit; ensure government APMC electronic weighment receipt.",
-                "",
-                f"**Risks to consider:** {sell_rec.get('storage_risk_assessment', 'Holding crops in unsealed storage risks dry-matter shrinkage and weevil infestation if storage limits are exceeded.')}",
-                "",
-                f"**Data used:** Verified Agmarknet APMC mandi records and FarmShield historical price trend model.",
-            ]
+            if user_lang == "te":
+                lines = [
+                    f"**Recommendation:** {decision}",
+                    "",
+                    f"**Why:** {crop_name} సగటు మోడల్ ధర క్వింటాలుకు **₹{avg_price:,.0f}**, ధర ధోరణి **{trend}**. సమీప మార్కెట్: **{top_mandi}** (₹{top_price:,.0f}/క్వింటాల్).",
+                    "",
+                    f"**What to do next:**",
+                    f"1. రవాణా ఖర్చులను (సుమారు ₹1.50/క్వింటాల్/కి.మీ) మినహాయించిన తర్వాత నికర రాబడిని లెక్కించండి.",
+                    f"2. ధాన్యంలో తేమ సురక్షిత పరిమితి ({crop_prof.get('safe_moisture_percent', 12)}%) కంటే తక్కువగా ఉందని నిర్ధారించుకోండి.",
+                    f"3. APMC ఎలక్ట్రానిక్ బరువు రశీదును తప్పనిసరిగా తీసుకోండి.",
+                    "",
+                    f"**Risks to consider:** సురక్షితం కాని గోదాముల్లో ఎక్కువ కాలం ఉంచితే ధాన్యం బరువు తగ్గడం, పురుగులు పట్టే ప్రమాదం ఉంది.",
+                    "",
+                    f"**Data used:** అగ్మార్క్‌నెట్ (Agmarknet) APMC మార్కెట్ రికార్డులు.",
+                ]
+            else:
+                lines = [
+                    f"**Recommendation:** {decision}",
+                    "",
+                    f"**Why:** Stored APMC mandi observations for {crop_name} indicate an average modal price of **₹{avg_price:,.0f} / quintal** with a **{trend}** price trend. Top alternative: **{top_mandi}** at **₹{top_price:,.0f} / qtl**.",
+                    "",
+                    f"**What to do next:**",
+                    f"1. Compare net return after deducting local transport costs (approx. ₹1.50/qtl/km) before dispatching lot.",
+                    f"2. Inspect stored grain moisture: ensure moisture is strictly below safe threshold ({crop_prof.get('safe_moisture_percent', 12)}%) before hauling.",
+                    f"3. Avoid selling on unverified credit; ensure government APMC electronic weighment receipt.",
+                    "",
+                    f"**Risks to consider:** {sell_rec.get('storage_risk_assessment', 'Holding crops in unsealed storage risks dry-matter shrinkage and weevil infestation if storage limits are exceeded.')}",
+                    "",
+                    f"**Data used:** Verified Agmarknet APMC mandi records and FarmShield historical price trend model.",
+                ]
             return "\n".join(lines), False
 
         # 3. Storage Monitoring & Threshold Violation Intent
@@ -182,20 +253,36 @@ class GroqClient:
 
         if is_temp_violation and t is not None:
             alert_action = alerts[0].get("action") if alerts else "Increase ventilation and shade storage structure immediately."
-            lines = [
-                f"**Recommendation:** Immediate corrective cooling and ventilation required for {crop_name}.",
-                "",
-                f"**Why:** Current measured storage temperature is **{t}°C**, which exceeds the verified ICAR safe ceiling of **{t_max}°C** (safe range: **{t_min}°C–{t_max}°C**).",
-                "",
-                f"**What to do next:**",
-                f"1. **Immediate action:** {alert_action}",
-                f"2. **Preventive step:** Keep aeration vents open during cooler night/early morning hours (15°C–20°C ambient) and install reflective rooftop thatch.",
-                f"3. **When to check again:** Take a fresh sensor measurement in 3 hours to confirm internal granary temperature is declining.",
-                "",
-                f"**Risks to consider:** Temperatures above {t_max}°C accelerate grain respiration, cause dry matter shrinkage, and incubate storage insect pests (weevils and borers).",
-                "",
-                f"**Data used:** Verified ICAR Post-Harvest Standards for {crop_name} & Live Sensor Telemetry.",
-            ]
+            if user_lang == "te":
+                lines = [
+                    f"**Recommendation:** వేగంగా గోదాం లోని వెంటిలేషన్ లేదా ఎగ్జాస్ట్ ఫ్యాన్ లను ప్రారంభించండి, అంతర్గత ఉష్ణోగ్రతను {t_max:.0f}°C కంటే తక్కువగా తగ్గించండి.",
+                    "",
+                    f"**Why:** మీ గోదాం లోని ప్రస్తుత ఉష్ణోగ్రత **{t}°C**, ఇది సురక్షిత పరిమితి ({t_min:.0f}–{t_max:.0f}°C) కన్నా **క్లిష్టంగా (critical)** ఎక్కువ. తేమ {rh or 58}% ఉన్నప్పటికీ, అధిక ఉష్ణోగ్రత వల్ల {crop_name} ధాన్యం నాణ్యత కోల్పోతుంది.",
+                    "",
+                    f"**What to do next:**",
+                    f"1. **తక్షణ చర్య:** {alert_action} లేదా ఎగ్జాస్ట్ ఫ్యాన్లు ఆన్ చేసి ఉష్ణోగ్రతను {t_min:.0f}–{t_max:.0f}°C మధ్యకు తగ్గించండి.",
+                    f"2. **ప్రతిరోధక చర్య:** గోదాం ఇన్సులేషన్ మెరుగుపరచండి మరియు చల్లని సమయాల్లో మాత్రమే వెంటిలేషన్ చేయండి.",
+                    f"3. **పర్యవేక్షణ:** ప్రతి 30–45 నిమిషాలకు ఉష్ణోగ్రతను తనిఖీ చేసి సురక్షిత పరిమితిలో ఉందని నిర్ధారించుకోండి.",
+                    "",
+                    f"**Risks to consider:** అధిక ఉష్ణోగ్రత వల్ల పురుగులు, ఎంజైమ్ చర్యలు పెరిగి నిల్వ కాలం తగ్గుతుంది.",
+                    "",
+                    f"**Data used:** సెన్సార్ టెలిమెట్రీ & ICAR సురక్షిత నిల్వ ప్రమాణాలు.",
+                ]
+            else:
+                lines = [
+                    f"**Recommendation:** Immediate corrective cooling and ventilation required for {crop_name}.",
+                    "",
+                    f"**Why:** Current measured storage temperature is **{t}°C**, which exceeds the verified ICAR safe ceiling of **{t_max}°C** (safe range: **{t_min}°C–{t_max}°C**).",
+                    "",
+                    f"**What to do next:**",
+                    f"1. **Immediate action:** {alert_action}",
+                    f"2. **Preventive step:** Keep aeration vents open during cooler night/early morning hours (15°C–20°C ambient) and install reflective rooftop thatch.",
+                    f"3. **When to check again:** Take a fresh sensor measurement in 3 hours to confirm internal granary temperature is declining.",
+                    "",
+                    f"**Risks to consider:** Temperatures above {t_max}°C accelerate grain respiration, cause dry matter shrinkage, and incubate storage insect pests (weevils and borers).",
+                    "",
+                    f"**Data used:** Verified ICAR Post-Harvest Standards for {crop_name} & Live Sensor Telemetry.",
+                ]
             return "\n".join(lines), False
 
         # 4. Traditional Pest & Preservation Guidance Intent

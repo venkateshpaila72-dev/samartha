@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { chatbotService, speechService } from '../../services/monitoringService';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   MessageSquare,
   Send,
@@ -35,12 +36,261 @@ const SUPPORTED_LANGUAGES = [
   { code: 'bn', label: 'বাংলা (Bengali)' },
 ];
 
+// Helper to parse sections with custom cards and icons
+function parseSections(text) {
+  if (!text) return [];
+  const regex = /(?:^|\n)\s*\*\*([^*]+?):?\*\*\s*:?\s*/g;
+  const sections = [];
+  let lastIndex = 0;
+  let currentHeader = null;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    const matchedHeader = match[1].trim();
+    const matchStart = match.index;
+    if (currentHeader) {
+      const body = text.substring(lastIndex, matchStart).trim();
+      sections.push({ header: currentHeader, body });
+    } else {
+      const leadingText = text.substring(0, matchStart).trim();
+      if (leadingText) {
+        sections.push({ header: null, body: leadingText });
+      }
+    }
+    currentHeader = matchedHeader;
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (currentHeader) {
+    const body = text.substring(lastIndex).trim();
+    sections.push({ header: currentHeader, body });
+  } else if (sections.length === 0) {
+    sections.push({ header: null, body: text.trim() });
+  }
+
+  return sections;
+}
+
+// Inline bold formatter replacing **text** with clean <strong>
+function renderInlineFormatting(text) {
+  if (!text) return null;
+  const parts = text.split(/(\*\*[^*]+?\*\*)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      const boldText = part.slice(2, -2);
+      return (
+        <strong key={index} style={{ color: '#38bdf8', fontWeight: '700' }}>
+          {boldText}
+        </strong>
+      );
+    }
+    return part;
+  });
+}
+
+function renderGeneralContent(text) {
+  if (!text) return null;
+  const lines = text.split('\n');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {lines.map((line, lIdx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return null;
+
+        // Numbered list item: e.g. "1. ..."
+        const numMatch = trimmed.match(/^(\d+)\.\s*(.*)$/);
+        if (numMatch) {
+          return (
+            <div key={lIdx} style={{ display: 'flex', gap: '9px', alignItems: 'flex-start', marginTop: '3px' }}>
+              <span
+                style={{
+                  background: 'rgba(56, 189, 248, 0.2)',
+                  color: '#38bdf8',
+                  borderRadius: '50%',
+                  width: '20px',
+                  height: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.74rem',
+                  fontWeight: '700',
+                  flexShrink: 0,
+                  marginTop: '2px',
+                }}
+              >
+                {numMatch[1]}
+              </span>
+              <span style={{ flex: 1 }}>{renderInlineFormatting(numMatch[2])}</span>
+            </div>
+          );
+        }
+
+        // Bullet item: e.g. "- ..." or "* ..." or "• ..."
+        const bulletMatch = trimmed.match(/^[-*•]\s*(.*)$/);
+        if (bulletMatch) {
+          const isSub = line.startsWith('   ') || line.startsWith('\t');
+          return (
+            <div key={lIdx} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginLeft: isSub ? '20px' : '4px' }}>
+              <span style={{ color: '#10b981', fontSize: '0.9rem', lineHeight: '1.4rem' }}>•</span>
+              <span style={{ flex: 1 }}>{renderInlineFormatting(bulletMatch[1])}</span>
+            </div>
+          );
+        }
+
+        // Friendly closing line (e.g. "మీకు మరేదైనా సహాయం కావాలా?..." or "🙏")
+        if (trimmed.includes('సహాయం') || trimmed.includes('🙏') || trimmed.includes('help') || trimmed.includes('మదద్')) {
+          return (
+            <div key={lIdx} style={{ marginTop: '8px', paddingTop: '8px', borderTop: '1px dashed rgba(255, 255, 255, 0.1)', color: '#94a3b8', fontStyle: 'italic', fontSize: '0.86rem' }}>
+              {renderInlineFormatting(trimmed)}
+            </div>
+          );
+        }
+
+        return <div key={lIdx}>{renderInlineFormatting(trimmed)}</div>;
+      })}
+    </div>
+  );
+}
+
+// High-impact structured response card formatter for farming recommendations
+function FormattedMessage({ content }) {
+  if (!content) return null;
+  const sections = parseSections(content);
+
+  // If there are no structured sections, render cleanly as formatted paragraphs
+  if (sections.length === 1 && !sections[0].header) {
+    return <div style={{ lineHeight: 1.6 }}>{renderGeneralContent(content)}</div>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {sections.map((sec, idx) => {
+        if (!sec.header) {
+          return (
+            <div key={idx} style={{ lineHeight: 1.6, color: '#f8fafc' }}>
+              {renderGeneralContent(sec.body)}
+            </div>
+          );
+        }
+
+        const hLower = sec.header.toLowerCase();
+        let badge = {
+          bg: 'rgba(56, 189, 248, 0.08)',
+          border: 'rgba(56, 189, 248, 0.25)',
+          left: '#38bdf8',
+          color: '#38bdf8',
+          icon: <CheckCircle size={15} color="#38bdf8" />,
+        };
+
+        if (hLower.includes('recommend') || hLower.includes('సిఫార్సు') || hLower.includes('सिफारिश')) {
+          badge = {
+            bg: 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.08) 100%)',
+            border: 'rgba(16, 185, 129, 0.35)',
+            left: '#10b981',
+            color: '#34d399',
+            icon: <Sparkles size={15} color="#10b981" />,
+          };
+        } else if (hLower.includes('why') || hLower.includes('ఎందుకు') || hLower.includes('कारण')) {
+          badge = {
+            bg: 'rgba(56, 189, 248, 0.08)',
+            border: 'rgba(56, 189, 248, 0.25)',
+            left: '#38bdf8',
+            color: '#38bdf8',
+            icon: <CheckCircle size={15} color="#38bdf8" />,
+          };
+        } else if (hLower.includes('next') || hLower.includes('చర్య') || hLower.includes('करें')) {
+          badge = {
+            bg: 'rgba(245, 158, 11, 0.08)',
+            border: 'rgba(245, 158, 11, 0.25)',
+            left: '#f59e0b',
+            color: '#fbbf24',
+            icon: <Calendar size={15} color="#f59e0b" />,
+          };
+        } else if (hLower.includes('risk') || hLower.includes('ప్రమాద') || hLower.includes('जोखिम')) {
+          badge = {
+            bg: 'rgba(244, 63, 94, 0.08)',
+            border: 'rgba(244, 63, 94, 0.25)',
+            left: '#f43f5e',
+            color: '#fb7185',
+            icon: <AlertTriangle size={15} color="#f43f5e" />,
+          };
+        } else if (hLower.includes('data') || hLower.includes('డేటా') || hLower.includes('डेटा')) {
+          badge = {
+            bg: 'rgba(99, 102, 241, 0.08)',
+            border: 'rgba(99, 102, 241, 0.25)',
+            left: '#818cf8',
+            color: '#a5b4fc',
+            icon: <ShieldCheck size={15} color="#818cf8" />,
+          };
+        }
+
+        return (
+          <div
+            key={idx}
+            style={{
+              background: badge.bg,
+              border: `1px solid ${badge.border}`,
+              borderLeft: `4px solid ${badge.left}`,
+              borderRadius: '10px',
+              padding: '12px 16px',
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                color: badge.color,
+                fontWeight: '700',
+                fontSize: '0.88rem',
+                marginBottom: '8px',
+                textTransform: 'capitalize',
+              }}
+            >
+              {badge.icon}
+              <span>{sec.header}</span>
+            </div>
+            <div style={{ fontSize: '0.91rem', lineHeight: 1.65, color: '#f1f5f9' }}>
+              {renderGeneralContent(sec.body)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ChatbotPage({ activeBatch }) {
+  // Synchronize with global website language
+  let globalLang = 'en';
+  let setGlobalLanguage = null;
+  try {
+    const langContext = useLanguage();
+    globalLang = langContext.currentLang;
+    setGlobalLanguage = langContext.changeLanguage;
+  } catch {
+    // Fallback if rendered outside provider
+  }
+
+  const [chatLang, setChatLang] = useState(() => {
+    return globalLang || localStorage.getItem('farmshield_lang') || 'en';
+  });
+
+  const [autoVoice, setAutoVoice] = useState(() => {
+    try {
+      const saved = localStorage.getItem('farmshield_auto_voice');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
   const [conversations, setConversations] = useState([]);
   const [currentConvoId, setCurrentConvoId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [chatLang, setChatLang] = useState('en');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [confirmingAction, setConfirmingAction] = useState(false);
@@ -67,6 +317,24 @@ export default function ChatbotPage({ activeBatch }) {
     { label: '🐛 Natural Weevil Deterrence', text: 'How do I protect my stored grain from weevils naturally using neem?' },
     { label: '📅 Plan Wheat Harvest Date', text: 'I want to harvest my wheat on October 18.' },
   ];
+
+  // Sync when website global language changes
+  useEffect(() => {
+    if (globalLang && globalLang !== chatLang) {
+      setChatLang(globalLang);
+    }
+  }, [globalLang]);
+
+  const handleLanguageChange = (code) => {
+    stopSpeaking();
+    setChatLang(code);
+    if (setGlobalLanguage) {
+      setGlobalLanguage(code);
+    }
+    try {
+      localStorage.setItem('farmshield_lang', code);
+    } catch {}
+  };
 
   // Stop any active audio playback immediately
   const stopSpeaking = () => {
@@ -167,14 +435,9 @@ export default function ChatbotPage({ activeBatch }) {
       });
       setMessages((prev) => [...prev, response]);
 
-      // Check auto read-aloud preference from localStorage / profile
-      try {
-        const userProfile = JSON.parse(localStorage.getItem('farmshield_user') || '{}');
-        if (userProfile.auto_read_aloud && response.content) {
-          handleToggleSpeak(response.message_id, response.content);
-        }
-      } catch {
-        // Ignore JSON error
+      // Automatically read aloud in selected language if autoVoice is active
+      if (autoVoice && response.content) {
+        handleToggleSpeak(response.message_id, response.content);
       }
     } catch (err) {
       alert(err.message || 'Error generating AI response');
@@ -475,7 +738,7 @@ export default function ChatbotPage({ activeBatch }) {
             <select
               style={{ background: 'transparent', border: 'none', color: '#f8fafc', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
               value={chatLang}
-              onChange={(e) => setChatLang(e.target.value)}
+              onChange={(e) => handleLanguageChange(e.target.value)}
             >
               {SUPPORTED_LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code} style={{ background: '#0f172a', color: '#fff' }}>
@@ -484,6 +747,36 @@ export default function ChatbotPage({ activeBatch }) {
               ))}
             </select>
           </div>
+
+          {/* Auto Voice Read-Aloud Toggle */}
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => {
+              const next = !autoVoice;
+              setAutoVoice(next);
+              try {
+                localStorage.setItem('farmshield_auto_voice', String(next));
+              } catch {}
+              if (!next) stopSpeaking();
+            }}
+            style={{
+              fontSize: '0.82rem',
+              padding: '6px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: autoVoice ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+              border: autoVoice ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(255, 255, 255, 0.1)',
+              color: autoVoice ? '#34d399' : '#94a3b8',
+              borderRadius: '8px',
+              cursor: 'pointer',
+            }}
+            title={autoVoice ? "Auto read-aloud active (click to turn off auto voice)" : "Auto read-aloud off (click to enable auto voice)"}
+          >
+            {autoVoice ? <Volume2 size={15} /> : <VolumeX size={15} />}
+            <span>{autoVoice ? 'Auto Voice: ON' : 'Auto Voice: OFF'}</span>
+          </button>
 
           <button className="btn-secondary" onClick={handleNewConversation} style={{ fontSize: '0.85rem' }} title="Start a fresh advisory conversation">
             <PlusCircle size={16} /> New Chat
@@ -617,7 +910,7 @@ export default function ChatbotPage({ activeBatch }) {
                     </div>
                   )}
 
-                  {m.content}
+                  {isBot ? <FormattedMessage content={m.content} /> : m.content}
 
                   {/* Interactive Structured Confirmation Card */}
                   {m.pending_action && (
@@ -792,6 +1085,51 @@ export default function ChatbotPage({ activeBatch }) {
                 style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1 }}
               >
                 ×
+              </button>
+            </div>
+          )}
+
+          {/* Active Voice-Over Status Banner with Immediate Stop */}
+          {(speakingMessageId || loadingSpeechMessageId) && (
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(6, 95, 70, 0.25) 100%)',
+              border: '1px solid rgba(16, 185, 129, 0.4)',
+              padding: '8px 14px',
+              borderRadius: '8px',
+              color: '#34d399',
+              fontSize: '0.84rem',
+              marginBottom: '10px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Volume2 size={16} className="pulse" />
+                <span>
+                  {loadingSpeechMessageId
+                    ? 'Preparing voice-over in selected language...'
+                    : `Speaking response in ${SUPPORTED_LANGUAGES.find((l) => l.code === chatLang)?.label || chatLang}...`}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={stopSpeaking}
+                style={{
+                  background: 'rgba(239, 68, 68, 0.25)',
+                  border: '1px solid #ef4444',
+                  color: '#fca5a5',
+                  padding: '4px 12px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '0.8rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px'
+                }}
+                title="Stop voice playback"
+              >
+                <VolumeX size={14} /> Stop Voice-Over
               </button>
             </div>
           )}

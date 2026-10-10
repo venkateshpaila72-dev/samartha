@@ -227,6 +227,7 @@ class ChatbotService:
             user_id=user_id,
             batch_id=batch_id,
             user_query=payload.message,
+            language=payload.language or getattr(convo, "language", None),
         )
 
         # 2. Check if user is confirming a pending action from the conversation
