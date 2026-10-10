@@ -1,0 +1,69 @@
+name: Daily AGMARKNET market sync
+
+on:
+  schedule:
+    - cron: "35 2 * * *"
+  workflow_dispatch:
+    inputs:
+      crop:
+        description: "Optional exact crop/commodity filter for targeted historical import"
+        required: false
+        type: string
+      state:
+        description: "Optional state filter"
+        required: false
+        type: string
+      district:
+        description: "Optional district filter"
+        required: false
+        type: string
+      max_pages:
+        description: "Pages of up to 1000 provider records"
+        required: false
+        default: "10"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: market-data-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate deployment secrets
+        env:
+          API_BASE: ${{ secrets.FARMSHIELD_API_BASE_URL }}
+          SYNC_SECRET: ${{ secrets.MARKET_SYNC_SECRET }}
+        run: |
+          test -n "$API_BASE" || { echo "Missing repository secret FARMSHIELD_API_BASE_URL"; exit 1; }
+          test -n "$SYNC_SECRET" || { echo "Missing repository secret MARKET_SYNC_SECRET"; exit 1; }
+          case "$API_BASE" in https://*) ;; *) echo "FARMSHIELD_API_BASE_URL must use HTTPS"; exit 1;; esac
+
+      - name: Import real provider records
+        env:
+          API_BASE: ${{ secrets.FARMSHIELD_API_BASE_URL }}
+          SYNC_SECRET: ${{ secrets.MARKET_SYNC_SECRET }}
+          CROP: ${{ inputs.crop }}
+          STATE: ${{ inputs.state }}
+          DISTRICT: ${{ inputs.district }}
+          MAX_PAGES: ${{ inputs.max_pages }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          URL="${API_BASE%/}/api/v1/market/sync"
+          PARAMS="max_pages=${MAX_PAGES:-10}"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            [ -z "${CROP:-}" ] || PARAMS="$PARAMS&crop=$(python -c 'import os,urllib.parse;print(urllib.parse.quote(os.environ["CROP"]))')"
+            [ -z "${STATE:-}" ] || PARAMS="$PARAMS&state=$(python -c 'import os,urllib.parse;print(urllib.parse.quote(os.environ["STATE"]))')"
+            [ -z "${DISTRICT:-}" ] || PARAMS="$PARAMS&district=$(python -c 'import os,urllib.parse;print(urllib.parse.quote(os.environ["DISTRICT"]))')"
+          fi
+          curl --fail-with-body --silent --show-error --retry 2 --retry-delay 5 \
+            --max-time 480 \
+            -H "X-Market-Sync-Secret: $SYNC_SECRET" \
+            -H "Accept: application/json" \
+            -X POST "$URL?$PARAMS"
