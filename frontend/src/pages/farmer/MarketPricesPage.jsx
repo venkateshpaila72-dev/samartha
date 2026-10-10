@@ -2,14 +2,17 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { marketService } from '../../services/marketService';
 import { TrendingUp, Store, MapPin, RefreshCw, AlertCircle } from 'lucide-react';
 import TranslatedText from '../../components/TranslatedText';
+import { useAuth } from '../../context/AuthContext';
 
 export default function MarketPricesPage({ activeBatch }) {
+  const { user } = useAuth();
   const batchCrop = activeBatch?.crop_profile?.crop_name || '';
+  const profileCrop = user?.selected_crop || '';
   const [cropQuery, setCropQuery] = useState(() => {
-    try { return batchCrop || localStorage.getItem('farmshield_selected_crop') || ''; } catch { return batchCrop; }
+    try { return profileCrop || batchCrop || localStorage.getItem('farmshield_selected_crop') || ''; } catch { return profileCrop || batchCrop; }
   });
-  const [state, setState] = useState(() => { try { return localStorage.getItem('farmshield_state') || ''; } catch { return ''; } });
-  const [district, setDistrict] = useState(() => { try { return localStorage.getItem('farmshield_district') || ''; } catch { return ''; } });
+  const [state, setState] = useState(() => { try { return user?.state || localStorage.getItem('farmshield_state') || ''; } catch { return user?.state || ''; } });
+  const [district, setDistrict] = useState(() => { try { return user?.district || localStorage.getItem('farmshield_district') || ''; } catch { return user?.district || ''; } });
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -41,16 +44,19 @@ export default function MarketPricesPage({ activeBatch }) {
   }, [cropQuery, state, district]);
 
   useEffect(() => {
-    if (batchCrop) {
-      setCropQuery(batchCrop);
-      fetchPrices(batchCrop);
+    const savedCrop = profileCrop || batchCrop || (() => {
+      try { return localStorage.getItem('farmshield_selected_crop') || ''; } catch { return ''; }
+    })();
+    if (savedCrop) {
+      setCropQuery(savedCrop);
+      fetchPrices(savedCrop);
     } else {
       setMarket(null);
       setError('Enter the crop and location to search the imported mandi-price dataset.');
     }
-    // Refresh when the active storage batch changes.
+    // Refresh when the active batch or saved profile crop changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batchCrop]);
+  }, [batchCrop, profileCrop]);
 
   const submit = (event) => {
     event.preventDefault();

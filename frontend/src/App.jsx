@@ -13,6 +13,7 @@ import ChatbotPage from './pages/farmer/ChatbotPage';
 import AlertsPage from './pages/farmer/AlertsPage';
 import WeatherPage from './pages/farmer/WeatherPage';
 import MarketPricesPage from './pages/farmer/MarketPricesPage';
+import FarmerProfilePage from './pages/farmer/FarmerProfilePage';
 import TraditionalGuidancePage from './pages/farmer/TraditionalGuidancePage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 
@@ -139,6 +140,10 @@ export default function App() {
             <WeatherPage
               activeBatch={activeBatch}
             />
+          )}
+
+          {currentTab === 'profile' && (
+            <FarmerProfilePage onNavigate={setCurrentTab} />
           )}
 
           {currentTab === 'market' && (

@@ -12,6 +12,8 @@ from app.schemas.common import APIResponse
 from app.schemas.market import MarketPriceReportOut
 from app.core.config import settings
 from app.integrations.market_ingestion_client import sync_market_prices
+from app.db.mongo import get_db
+import datetime
 
 router = APIRouter(tags=["Market Prices"])
 
@@ -106,3 +108,64 @@ async def sync_market_data(
             detail="Market provider ingestion failed. Check backend logs for the provider error.",
         ) from exc
     return {"success": True, "message": "Market-data ingestion completed.", "data": result}
+
+
+@router.post("/market/sync-now", tags=["Market Prices"])
+async def farmer_sync_market_data(
+    crop: str = Query(..., min_length=1, max_length=100),
+    state: Optional[str] = Query(None, max_length=100),
+    district: Optional[str] = Query(None, max_length=100),
+    current_user: dict = Depends(get_current_user),
+):
+    """Allow a signed-in farmer to request a small, crop-specific import without exposing provider secrets."""
+    clean_crop = crop.strip()
+    if not clean_crop:
+        raise HTTPException(status_code=422, detail="Choose a crop before syncing market prices.")
+    if not settings.MARKET_API_KEY.strip():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Market data sync is not configured on the server yet.",
+        )
+    db = get_db()
+    if db is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Market database is unavailable.")
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cooldown_collection = db["market_sync_requests"]
+    cooldown_key = {"user_id": current_user["id"]}
+    previous = cooldown_collection.find_one(cooldown_key, {"requested_at": 1})
+    if previous and previous.get("requested_at"):
+        try:
+            previous_at = previous["requested_at"]
+            if isinstance(previous_at, str):
+                previous_at = datetime.datetime.fromisoformat(previous_at.replace("Z", "+00:00"))
+            if previous_at.tzinfo is None:
+                previous_at = previous_at.replace(tzinfo=datetime.timezone.utc)
+            remaining = 900 - int((now - previous_at).total_seconds())
+            if remaining > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=f"Please wait {remaining // 60 + 1} minute(s) before requesting another market sync.",
+                    headers={"Retry-After": str(remaining)},
+                )
+        except ValueError:
+            # An invalid legacy timestamp is treated as expired; it cannot block sync forever.
+            pass
+    try:
+        result = await sync_market_prices(
+            crop=clean_crop, state=state, district=district, max_pages=2, page_size=500
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).error("Farmer market sync failed (%s)", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The market provider could not complete this sync. Try again later.",
+        ) from exc
+    cooldown_collection.update_one(
+        cooldown_key,
+        {"$set": {"requested_at": now.isoformat(), "crop": clean_crop, "state": state, "district": district}},
+        upsert=True,
+    )
+    return {"success": True, "message": "Market sync completed.", "data": result}
