@@ -129,6 +129,14 @@ export function LanguageProvider({ children }) {
     if (!SUPPORTED_LANGUAGES.some((language) => language.code === code)) return;
     setCurrentLang(code);
     try { localStorage.setItem('farmshield_lang', code); } catch { /* ignore */ }
+    // Keep the server-side farmer profile in sync so WhatsApp and backend agent
+    // responses use the same preferred language after a UI language change.
+    apiRequest('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify({ preferred_language: code }),
+    }).catch((error) => {
+      console.warn('Could not persist preferred language to farmer profile:', error?.message || error);
+    });
   }, []);
 
   const translateText = useCallback(async (text, targetLanguage = currentLang, sourceLanguage = 'en') => {
