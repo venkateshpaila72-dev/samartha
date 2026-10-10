@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { marketService } from '../../services/marketService';
 import { TrendingUp, Store, MapPin, RefreshCw, AlertCircle } from 'lucide-react';
+import TranslatedText from '../../components/TranslatedText';
 
 export default function MarketPricesPage({ activeBatch }) {
   const batchCrop = activeBatch?.crop_profile?.crop_name || '';
@@ -57,6 +58,21 @@ export default function MarketPricesPage({ activeBatch }) {
   };
 
   const prices = Array.isArray(market?.latest_prices) ? market.latest_prices : [];
+  const history = Array.isArray(market?.historical_prices) ? market.historical_prices : [];
+  const forecast = Array.isArray(market?.forecast_prices) ? market.forecast_prices : [];
+  const chartValues = [
+    ...history.map((point) => Number(point.average_modal_price_per_quintal)),
+    ...forecast.map((point) => Number(point.predicted_modal_price_per_quintal)),
+  ].filter(Number.isFinite);
+  const chartMin = chartValues.length ? Math.min(...chartValues) : 0;
+  const chartMax = chartValues.length ? Math.max(...chartValues) : 1;
+  const chartPoints = chartValues.map((value, index) => {
+    const x = chartValues.length <= 1 ? 10 : 10 + (index * 580) / (chartValues.length - 1);
+    const y = 150 - ((value - chartMin) / Math.max(1, chartMax - chartMin)) * 125;
+    return { x, y };
+  });
+  const historyPath = chartPoints.slice(0, history.length).map((p) => `${p.x},${p.y}`).join(' ');
+  const forecastPath = chartPoints.slice(Math.max(0, history.length - 1)).map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -194,6 +210,51 @@ export default function MarketPricesPage({ activeBatch }) {
                 </tbody>
               </table>
             </div>
+          </section>
+
+          <section className="glass-panel" style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '8px' }}>
+              <TranslatedText text="Historical market prices" />
+            </h3>
+            <p style={{ color: '#94a3b8', marginBottom: '16px' }}>
+              <TranslatedText text="Actual stored market observations for the selected crop and location. Missing dates are not filled with invented values." />
+            </p>
+            {history.length >= 2 ? (
+              <>
+                <div style={{ overflowX: 'auto' }}>
+                  <svg viewBox="0 0 600 175" role="img" aria-label="Historical and forecast crop market prices" style={{ width: '100%', minWidth: '320px', height: 'auto' }}>
+                    <line x1="10" y1="150" x2="590" y2="150" stroke="currentColor" opacity=".25" />
+                    <polyline points={historyPath} fill="none" stroke="#34d399" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                    {forecast.length > 0 && <polyline points={forecastPath} fill="none" stroke="#f59e0b" strokeWidth="3" strokeDasharray="7 5" strokeLinejoin="round" strokeLinecap="round" />}
+                  </svg>
+                </div>
+                <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', color: '#94a3b8', fontSize: '.85rem' }}>
+                  <span>🟢 <TranslatedText text="Actual historical prices" /></span>
+                  <span>🟠 <TranslatedText text="Indicative forecast" /></span>
+                </div>
+                <div style={{ maxHeight: '260px', overflowY: 'auto', marginTop: '14px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '.9rem' }}>
+                    <thead><tr><th style={{ padding: '8px' }}><TranslatedText text="Date" /></th><th style={{ padding: '8px' }}><TranslatedText text="Average modal price / quintal" /></th><th style={{ padding: '8px' }}><TranslatedText text="Observations" /></th></tr></thead>
+                    <tbody>{history.map((point) => <tr key={point.date}><td style={{ padding: '8px' }}>{point.date}</td><td style={{ padding: '8px' }}>₹{Number(point.average_modal_price_per_quintal).toLocaleString('en-IN')}</td><td style={{ padding: '8px' }}>{point.observations}</td></tr>)}</tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <p style={{ color: '#f59e0b' }}><TranslatedText text="Not enough dated historical observations to draw a reliable trend." /></p>
+            )}
+          </section>
+
+          <section className="glass-panel" style={{ padding: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '8px' }}><TranslatedText text="7-day price outlook" /></h3>
+            <p style={{ color: '#94a3b8', marginBottom: '14px' }}><TranslatedText text={market.forecast_note || 'Forecast unavailable'} /></p>
+            {forecast.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '.9rem' }}>
+                  <thead><tr><th style={{ padding: '10px' }}><TranslatedText text="Forecast date" /></th><th style={{ padding: '10px' }}><TranslatedText text="Estimated price / quintal" /></th><th style={{ padding: '10px' }}><TranslatedText text="Indicative range" /></th></tr></thead>
+                  <tbody>{forecast.map((point) => <tr key={point.date}><td style={{ padding: '10px' }}>{point.date}</td><td style={{ padding: '10px' }}>₹{Number(point.predicted_modal_price_per_quintal).toLocaleString('en-IN')}</td><td style={{ padding: '10px' }}>₹{Number(point.lower_estimate).toLocaleString('en-IN')} – ₹{Number(point.upper_estimate).toLocaleString('en-IN')}</td></tr>)}</tbody>
+                </table>
+              </div>
+            ) : <p style={{ color: '#f59e0b' }}><TranslatedText text="Forecast will appear when at least seven distinct dates of valid market data are available." /></p>}
           </section>
         </>
       )}
