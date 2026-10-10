@@ -50,19 +50,17 @@ export default function AutoTranslateDocument() {
       if (root.nodeType === Node.ELEMENT_NODE) elements.push(root);
       if (root.querySelectorAll) elements.push(...root.querySelectorAll('*'));
       for (const element of elements) {
-        if (shouldSkip(element)) continue;
-        queueElement(element);
-        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-        let node;
-        while ((node = walker.nextNode())) {
-          if (shouldSkip(node.parentElement)) continue;
-          if (translated.has(node)) continue;
-          const value = originals.has(node) ? originals.get(node) : node.nodeValue;
-          if (!eligible(value)) continue;
-          if (!originals.has(node)) originals.set(node, value);
-          trackedNodes.add(node);
-          pending.set(node, { kind: 'text', source: originals.get(node) });
-        }
+        if (!shouldSkip(element)) queueElement(element);
+      }
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (shouldSkip(node.parentElement) || translated.has(node)) continue;
+        const value = originals.has(node) ? originals.get(node) : node.nodeValue;
+        if (!eligible(value)) continue;
+        if (!originals.has(node)) originals.set(node, value);
+        trackedNodes.add(node);
+        pending.set(node, { kind: 'text', source: originals.get(node) });
       }
       schedule();
     };
