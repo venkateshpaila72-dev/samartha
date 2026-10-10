@@ -249,3 +249,19 @@ h1, h2, h3, h4, h5, h6 {
     padding: 20px 16px;
   }
 }
+
+/* Translation text gently fades into place after the language switch. */
+.translation-fade {
+  transition: opacity 180ms ease-in-out, filter 180ms ease-in-out;
+}
+.translation-pending {
+  opacity: 0.62;
+  filter: blur(0.2px);
+}
+.translation-ready {
+  opacity: 1;
+  filter: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .translation-fade { transition: none; }
+}
