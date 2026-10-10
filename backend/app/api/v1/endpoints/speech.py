@@ -1,6 +1,6 @@
+"""Speech-to-text transcription and text-to-speech synthesis endpoints."""
 
-"""Speech-to-text transcription endpoint."""
-
+import base64
 import logging
 from typing import Optional
 
@@ -12,7 +12,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.dependencies import get_current_user
 from app.integrations.azure_speech_client import AzureSpeechClient
@@ -30,9 +30,11 @@ ALLOWED_AUDIO_TYPES = {
     "audio/webm",
     "audio/mpeg",
     "audio/mp4",
+    "audio/m4a",
+    "application/octet-stream",
 }
 
-MAX_AUDIO_SIZE = 10 * 1024 * 1024
+MAX_AUDIO_SIZE = 15 * 1024 * 1024
 
 SUPPORTED_SPEECH_LANGUAGES = {
     "hi": "hi-IN",
@@ -42,6 +44,7 @@ SUPPORTED_SPEECH_LANGUAGES = {
     "mr": "mr-IN",
     "bn": "bn-IN",
     "gu": "gu-IN",
+    "pa": "pa-IN",
     "en": "en-IN",
 }
 
@@ -50,6 +53,19 @@ class TranscriptionResponse(BaseModel):
     transcript: str
     confidence: float
     language: str
+
+
+class SpeechSynthesisRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=5000, description="Text to convert to speech")
+    language: Optional[str] = Field(default="en", description="Target language code (en, hi, te, etc.)")
+    voice_name: Optional[str] = Field(default=None, description="Optional Azure voice identifier")
+
+
+class SpeechSynthesisResponse(BaseModel):
+    audio_base64: str
+    media_type: str = "audio/mpeg"
+    language: str
+    voice_name: str
 
 
 @router.post(
@@ -66,13 +82,14 @@ async def transcribe_audio_file(
             detail="An audio file must be provided for speech transcription.",
         )
 
-    content_type = (file.content_type or "").lower()
+    raw_content_type = (file.content_type or "").lower()
+    base_content_type = raw_content_type.split(";")[0].strip()
 
-    if content_type and content_type not in ALLOWED_AUDIO_TYPES:
+    if base_content_type and base_content_type not in ALLOWED_AUDIO_TYPES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
-                f"Unsupported audio format '{content_type}'. "
+                f"Unsupported audio format '{raw_content_type}'. "
                 "Please upload WAV, OGG, or WebM audio."
             ),
         )
@@ -88,7 +105,7 @@ async def transcribe_audio_file(
     if len(audio_bytes) > MAX_AUDIO_SIZE:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Audio file exceeds the maximum allowed size of 10 MB.",
+            detail="Audio file exceeds the maximum allowed size of 15 MB.",
         )
 
     if not AzureSpeechClient.is_configured():
@@ -111,19 +128,16 @@ async def transcribe_audio_file(
     try:
         transcript, confidence = await AzureSpeechClient.transcribe_audio(
             audio_bytes,
-            content_type=content_type or "audio/wav",
+            content_type=raw_content_type or "audio/wav",
             language=lang_code,
         )
-
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Audio could not be transcribed: {exc}",
         ) from exc
-
     except Exception as exc:
         logger.exception("Azure Speech transcription failed")
-
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Speech transcription service failed.",
@@ -136,5 +150,52 @@ async def transcribe_audio_file(
             transcript=transcript,
             confidence=confidence,
             language=lang_code,
+        ),
+    )
+
+
+@router.post(
+    "/speech/synthesize",
+    response_model=APIResponse[SpeechSynthesisResponse],
+)
+async def synthesize_speech_endpoint(
+    payload: SpeechSynthesisRequest,
+    current_user=Depends(get_current_user),
+):
+    if not payload.text or not payload.text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Text must not be empty.",
+        )
+
+    preferred_language = payload.language or (
+        current_user.get("preferred_language", "en")
+        if isinstance(current_user, dict)
+        else getattr(current_user, "preferred_language", "en")
+    )
+
+    try:
+        audio_bytes, locale, voice_name = await AzureSpeechClient.synthesize_speech(
+            text=payload.text.strip(),
+            language=preferred_language,
+            voice_name=payload.voice_name,
+        )
+    except Exception as exc:
+        logger.exception("Azure Speech synthesis failed")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Speech synthesis service failed.",
+        ) from exc
+
+    audio_b64 = base64.b64encode(audio_bytes).decode("ascii")
+
+    return APIResponse(
+        success=True,
+        message="Speech synthesized successfully.",
+        data=SpeechSynthesisResponse(
+            audio_base64=audio_b64,
+            media_type="audio/mpeg",
+            language=locale,
+            voice_name=voice_name,
         ),
     )

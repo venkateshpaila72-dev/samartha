@@ -1,19 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { diaryService } from '../../services/monitoringService';
 import { uploadImage } from '../../services/uploadService';
+import { speechService } from '../../services/speechService';
+import { useAuth } from '../../context/AuthContext';
 import {
   BookOpen,
   PlusCircle,
   Trash2,
   Mic,
+  MicOff,
   Camera,
   Calendar,
   AlertCircle,
   CheckCircle,
   UploadCloud,
+  Volume2,
+  VolumeX,
+  Loader2,
+  Square,
+  Sparkles,
 } from 'lucide-react';
 
 export default function DiaryPage({ activeBatch }) {
+  const { user } = useAuth();
   const [entries, setEntries] = useState([]);
   const [text, setText] = useState('');
   const [category, setCategory] = useState('general_inspection');
@@ -24,12 +33,21 @@ export default function DiaryPage({ activeBatch }) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Voice Recording (STT) & Audio Playback (TTS)
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [voiceTranscript, setVoiceTranscript] = useState('');
+  const [activePlayingId, setActivePlayingId] = useState(null);
+
+  const timerRef = useRef(null);
+
   const loadDiary = async () => {
     if (!activeBatch) return;
     setLoading(true);
     try {
       const data = await diaryService.getBatchEntries(activeBatch.batch_id);
-      setEntries(data);
+      setEntries(data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -41,6 +59,91 @@ export default function DiaryPage({ activeBatch }) {
     loadDiary();
   }, [activeBatch]);
 
+  useEffect(() => {
+    return () => {
+      speechService.stopAudio();
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  // Real Azure Speech-to-Text recording
+  const handleStartVoice = async () => {
+    try {
+      speechService.stopAudio();
+      setActivePlayingId(null);
+      await speechService.startRecording();
+      setIsRecording(true);
+      setRecordingSeconds(0);
+      timerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      alert(`Could not access microphone: ${err.message}`);
+    }
+  };
+
+  const handleStopVoice = async () => {
+    if (!isRecording) return;
+    if (timerRef.current) clearInterval(timerRef.current);
+    setIsRecording(false);
+    setIsTranscribing(true);
+
+    try {
+      const audioBlob = await speechService.stopRecording();
+      const res = await speechService.transcribeAudio(
+        audioBlob,
+        user?.preferred_language || 'en'
+      );
+      if (res?.transcript) {
+        setVoiceTranscript(res.transcript);
+        setText((prev) => {
+          const newText = prev ? `${prev} ${res.transcript}` : res.transcript;
+          return newText;
+        });
+
+        // Smart category heuristic
+        const lower = res.transcript.toLowerCase();
+        if (lower.includes('beetle') || lower.includes('insect') || lower.includes('pest') || lower.includes('weevil')) {
+          setCategory('insect_activity');
+          setSeverity('minor_concern');
+        } else if (lower.includes('smell') || lower.includes('odor') || lower.includes('musty') || lower.includes('sour')) {
+          setCategory('smell');
+        } else if (lower.includes('water') || lower.includes('damp') || lower.includes('moisture') || lower.includes('leak')) {
+          setCategory('moisture_leakage');
+        } else if (lower.includes('hot') || lower.includes('heat') || lower.includes('warm')) {
+          setCategory('temperature_hotspot');
+        }
+      }
+    } catch (err) {
+      alert(`Voice transcription error: ${err.message}`);
+    } finally {
+      setIsTranscribing(false);
+      setRecordingSeconds(0);
+    }
+  };
+
+  // Real Azure Text-to-Speech playback
+  const handlePlayTTS = async (entryId, textToSpeak) => {
+    if (activePlayingId === entryId) {
+      speechService.stopAudio();
+      setActivePlayingId(null);
+      return;
+    }
+
+    setActivePlayingId(entryId);
+    try {
+      await speechService.speakText(
+        textToSpeak,
+        user?.preferred_language || 'en',
+        () => setActivePlayingId(entryId),
+        () => setActivePlayingId(null)
+      );
+    } catch (err) {
+      console.error('Audio playback failed:', err);
+      setActivePlayingId(null);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!activeBatch || !text.trim()) return;
@@ -48,16 +151,19 @@ export default function DiaryPage({ activeBatch }) {
     try {
       await diaryService.createEntry(activeBatch.batch_id, {
         batch_id: activeBatch.batch_id,
-        observation_text: text,
+        observation_text: text.trim(),
         observation_category: category,
         severity_assessment: severity,
         photo_urls: photoUrl ? [photoUrl] : [],
-        provenance: 'farmer_visual_report',
+        voice_transcript: voiceTranscript || null,
+        provenance: voiceTranscript ? 'voice_transcription' : 'farmer_visual_report',
       });
       setText('');
       setPhotoUrl('');
+      setVoiceTranscript('');
+      setUploadSuccess(false);
       await loadDiary();
-      alert('Diary observation logged successfully!');
+      alert('Diary observation logged and stored successfully!');
     } catch (err) {
       alert(err.message || 'Error recording diary entry');
     } finally {
@@ -73,12 +179,6 @@ export default function DiaryPage({ activeBatch }) {
     } catch (err) {
       alert(err.message || 'Error deleting entry');
     }
-  };
-
-  const handleSimulateVoice = () => {
-    setText('Voice Memo: Inspected bottom sacks in center stack. Grain feels dry, no musty odor detected, but saw 2 small beetles near the north wall corner.');
-    setCategory('insect_activity');
-    setSeverity('minor_concern');
   };
 
   const handlePhotoUpload = async (e) => {
@@ -100,17 +200,24 @@ export default function DiaryPage({ activeBatch }) {
   };
 
   if (!activeBatch) {
-    return <div className="glass-panel" style={{ padding: '40px', textAlign: 'center' }}>Please select a batch from the top navigation.</div>;
+    return (
+      <div className="glass-panel" style={{ padding: '40px', textAlign: 'center' }}>
+        Please select a batch from the top navigation.
+      </div>
+    );
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Header */}
       <div className="glass-panel" style={{ padding: '24px' }}>
-        <span className="badge badge-verified">Workflow 6: Farmer Diary & Observation Log</span>
+        <span className="badge badge-verified">
+          <Sparkles size={13} /> Workflow 6: Farmer Diary & Voice Observation Log
+        </span>
         <h1 style={{ fontSize: '1.8rem', marginTop: '4px' }}>Crop Storage Diary</h1>
         <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
-          Record manual inspections, unusual odors, insect sightings, moisture changes, and voice notes for <strong>{activeBatch.custom_batch_name}</strong>.
+          Record manual inspections by <strong>typing text</strong> or <strong>speaking in voice</strong> (powered by Microsoft Azure Speech) for{' '}
+          <strong>{activeBatch.custom_batch_name}</strong>. All observations are permanently stored.
         </p>
       </div>
 
@@ -121,20 +228,101 @@ export default function DiaryPage({ activeBatch }) {
             <h3 style={{ fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <PlusCircle size={20} color="#10b981" /> Record Observation
             </h3>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={handleSimulateVoice}
-              style={{ fontSize: '0.78rem', padding: '4px 10px' }}
-              title="Transcribe Voice Note"
-            >
-              <Mic size={14} color="#f59e0b" /> Voice Note Simulation
-            </button>
+
+            {/* Azure STT Voice Observation Button */}
+            {!isRecording ? (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleStartVoice}
+                disabled={isTranscribing}
+                style={{
+                  fontSize: '0.8rem',
+                  padding: '6px 12px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  border: '1px solid #10b981',
+                  color: '#34d399',
+                  cursor: 'pointer',
+                }}
+                title="Speak observation using Azure Speech"
+              >
+                <Mic size={15} color="#10b981" /> Tell in Voice (Azure Speech)
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleStopVoice}
+                style={{
+                  fontSize: '0.8rem',
+                  padding: '6px 12px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                <Square size={13} /> Done Speaking ({recordingSeconds}s)
+              </button>
+            )}
           </div>
+
+          {/* Voice Recording / Transcribing Indicator */}
+          {isRecording && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 14px',
+                marginBottom: '14px',
+                borderRadius: '8px',
+                background: 'rgba(239, 68, 68, 0.15)',
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                color: '#f87171',
+                fontSize: '0.86rem',
+              }}
+            >
+              <span
+                style={{
+                  width: '10px',
+                  height: '10px',
+                  borderRadius: '50%',
+                  background: '#ef4444',
+                  display: 'inline-block',
+                }}
+              />
+              <strong>Listening to observation... ({recordingSeconds}s)</strong> Speak clearly in {user?.preferred_language?.toUpperCase() || 'EN'}.
+            </div>
+          )}
+
+          {isTranscribing && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                marginBottom: '14px',
+                color: '#34d399',
+                fontSize: '0.84rem',
+              }}
+            >
+              <Loader2 size={16} className="spin-animation" />
+              Transcribing audio with Azure Cognitive Speech Services...
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div>
-              <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Observation Category</label>
+              <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                Observation Category
+              </label>
               <select
                 className="input-field"
                 value={category}
@@ -151,7 +339,9 @@ export default function DiaryPage({ activeBatch }) {
             </div>
 
             <div>
-              <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Severity Assessment</label>
+              <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                Severity Assessment
+              </label>
               <select
                 className="input-field"
                 value={severity}
@@ -164,12 +354,21 @@ export default function DiaryPage({ activeBatch }) {
             </div>
 
             <div>
-              <label style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Detailed Inspection Notes</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <label style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
+                  Detailed Inspection Notes (Text or Voice)
+                </label>
+                {voiceTranscript && (
+                  <span style={{ fontSize: '0.74rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <CheckCircle size={12} /> Voice Transcribed
+                  </span>
+                )}
+              </div>
               <textarea
                 required
                 rows={4}
                 className="input-field"
-                placeholder="Describe what you saw, smelled, or felt inside the storage structure..."
+                placeholder="Type your notes or click 'Tell in Voice' above to speak your observation..."
                 value={text}
                 onChange={(e) => setText(e.target.value)}
               />
@@ -235,11 +434,16 @@ export default function DiaryPage({ activeBatch }) {
                         borderRadius: '8px',
                         border: '1px solid rgba(56, 189, 248, 0.4)',
                       }}
-                      onError={(e) => { e.target.style.display = 'none'; }}
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                      }}
                     />
                     <button
                       type="button"
-                      onClick={() => { setPhotoUrl(''); setUploadSuccess(false); }}
+                      onClick={() => {
+                        setPhotoUrl('');
+                        setUploadSuccess(false);
+                      }}
                       style={{
                         position: 'absolute',
                         top: '-6px',
@@ -262,13 +466,13 @@ export default function DiaryPage({ activeBatch }) {
               </div>
             </div>
 
-            <button type="submit" disabled={submitting} className="btn-primary" style={{ justifyContent: 'center' }}>
-              {submitting ? 'Saving Observation...' : 'Save to Diary'}
+            <button type="submit" disabled={submitting || isRecording} className="btn-primary" style={{ justifyContent: 'center' }}>
+              {submitting ? 'Saving Observation to Storage...' : 'Save Observation to Diary'}
             </button>
           </form>
         </div>
 
-        {/* Diary Timeline */}
+        {/* Diary Timeline with Audio Read-Aloud */}
         <div className="glass-panel" style={{ padding: '24px' }}>
           <h3 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>Observation Timeline ({entries.length})</h3>
 
@@ -281,6 +485,8 @@ export default function DiaryPage({ activeBatch }) {
               {entries.map((entry) => {
                 const isUrgent = entry.severity_assessment === 'urgent_attention';
                 const isMinor = entry.severity_assessment === 'minor_concern';
+                const isPlayingThis = activePlayingId === entry.entry_id;
+
                 return (
                   <div
                     key={entry.entry_id}
@@ -291,14 +497,31 @@ export default function DiaryPage({ activeBatch }) {
                       padding: '16px',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '8px'
+                      gap: '8px',
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span className={`badge ${isUrgent ? 'badge-critical' : (isMinor ? 'badge-warning' : 'badge-verified')}`}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span className={`badge ${isUrgent ? 'badge-critical' : isMinor ? 'badge-warning' : 'badge-verified'}`}>
                           {entry.observation_category?.replace('_', ' ').toUpperCase()}
                         </span>
+                        {entry.provenance === 'voice_transcription' && (
+                          <span
+                            style={{
+                              fontSize: '0.72rem',
+                              color: '#34d399',
+                              background: 'rgba(16, 185, 129, 0.12)',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(16, 185, 129, 0.3)',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            <Mic size={11} /> Voice Note
+                          </span>
+                        )}
                         <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
                           {new Date(entry.created_at).toLocaleString()}
                         </span>
@@ -316,8 +539,38 @@ export default function DiaryPage({ activeBatch }) {
                       {entry.observation_text}
                     </p>
 
-                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                      Provenance: {entry.provenance}
+                    {/* Azure TTS Listen Button on each Observation Card */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handlePlayTTS(entry.entry_id, entry.observation_text)}
+                        className="btn-secondary"
+                        style={{
+                          padding: '4px 10px',
+                          fontSize: '0.78rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          border: isPlayingThis ? '1px solid #10b981' : '1px solid rgba(255, 255, 255, 0.1)',
+                          background: isPlayingThis ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+                          color: isPlayingThis ? '#34d399' : '#94a3b8',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {isPlayingThis ? (
+                          <>
+                            <VolumeX size={14} color="#34d399" /> Stop Audio
+                          </>
+                        ) : (
+                          <>
+                            <Volume2 size={14} /> Listen (Azure Speech)
+                          </>
+                        )}
+                      </button>
+
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        Provenance: {entry.provenance}
+                      </div>
                     </div>
                   </div>
                 );
