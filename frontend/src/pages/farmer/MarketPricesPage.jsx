@@ -9,7 +9,7 @@ export default function MarketPricesPage({ activeBatch }) {
   const batchCrop = activeBatch?.crop_profile?.crop_name || '';
   const profileCrop = user?.selected_crop || '';
   const [cropQuery, setCropQuery] = useState(() => {
-    try { return batchCrop || profileCrop || localStorage.getItem('farmshield_selected_crop') || ''; } catch { return batchCrop || profileCrop; }
+    try { return profileCrop || batchCrop || localStorage.getItem('farmshield_selected_crop') || ''; } catch { return profileCrop || batchCrop; }
   });
   const [state, setState] = useState(() => { try { return user?.state || localStorage.getItem('farmshield_state') || ''; } catch { return user?.state || ''; } });
   const [district, setDistrict] = useState(() => { try { return user?.district || localStorage.getItem('farmshield_district') || ''; } catch { return user?.district || ''; } });
@@ -44,7 +44,7 @@ export default function MarketPricesPage({ activeBatch }) {
   }, [cropQuery, state, district]);
 
   useEffect(() => {
-    const savedCrop = batchCrop || profileCrop || (() => {
+    const savedCrop = profileCrop || batchCrop || (() => {
       try { return localStorage.getItem('farmshield_selected_crop') || ''; } catch { return ''; }
     })();
     if (savedCrop) {
