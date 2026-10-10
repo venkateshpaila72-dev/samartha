@@ -115,7 +115,7 @@ class MarketClient:
 
         crop_pattern = {"$regex": f"^{re.escape(crop)}$", "$options": "i"}
         query: dict[str, Any] = {"$or": [
-            {"crop_name": crop_pattern}, {"commodity": crop_pattern}, {"commodity_name": crop_pattern}
+            {"crop_name": crop_pattern}, {"crop": crop_pattern}, {"commodity": crop_pattern}, {"commodity_name": crop_pattern}
         ]}
         if state and state.strip():
             query["state"] = {"$regex": f"^{re.escape(state.strip())}$", "$options": "i"}
@@ -124,7 +124,7 @@ class MarketClient:
 
         try:
             collection = db[MARKET_PRICES_COLLECTION]
-            records = list(collection.find(query, {"_id": 0}).limit(5000))
+            records = list(collection.find(query, {"_id": 0}).sort([("price_date", -1), ("arrival_date", -1), ("date", -1)]).limit(5000))
         except Exception:
             logger.exception("Failed querying stored market prices")
             return cls._unavailable(crop, timestamp, "Could not read market-price records from the database.")
