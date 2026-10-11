@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
     diary,
     health,
     market,
+    operations,
     sensor_readings,
     speech,
     storage_batches,
@@ -31,6 +32,7 @@ api_router.include_router(chatbot.router)
 api_router.include_router(alerts.router)
 api_router.include_router(weather.router)
 api_router.include_router(market.router)
+api_router.include_router(operations.router)
 api_router.include_router(translation.router)
 api_router.include_router(speech.router)
 api_router.include_router(uploads.router)
