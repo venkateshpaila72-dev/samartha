@@ -17,6 +17,8 @@ from app.api.v1.endpoints import (
     translation,
     uploads,
     weather,
+    restaurant_management,
+    orchard_management,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -36,3 +38,5 @@ api_router.include_router(speech.router)
 api_router.include_router(uploads.router)
 api_router.include_router(admin.router)
 api_router.include_router(health.router)
+api_router.include_router(restaurant_management.router)
+api_router.include_router(orchard_management.router)

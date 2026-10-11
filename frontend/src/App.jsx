@@ -16,6 +16,8 @@ import MarketPricesPage from './pages/farmer/MarketPricesPage';
 import TraditionalGuidancePage from './pages/farmer/TraditionalGuidancePage';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import FarmerProfilePage from './pages/farmer/FarmerProfilePage';
+import RestaurantManagementPage from './pages/farmer/RestaurantManagementPage';
+import OrchardManagementPage from './pages/farmer/OrchardManagementPage';
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -179,6 +181,10 @@ export default function App() {
           {currentTab === 'traditional' && (
             <TraditionalGuidancePage />
           )}
+
+          {currentTab === 'restaurant' && <RestaurantManagementPage />}
+
+          {currentTab === 'orchard' && <OrchardManagementPage />}
 
           {currentTab === 'profile' && (
             <FarmerProfilePage />
