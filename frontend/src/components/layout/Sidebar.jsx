@@ -14,6 +14,8 @@ import {
   Scroll,
   ShieldAlert,
   UserRound,
+  Utensils,
+  Trees,
 } from 'lucide-react';
 
 export default function Sidebar({ currentTab, onSelectTab }) {
@@ -32,6 +34,8 @@ export default function Sidebar({ currentTab, onSelectTab }) {
     { id: 'market', label: t('market'), icon: TrendingUp },
     { id: 'traditional', label: t('traditional'), icon: Scroll },
     { id: 'profile', label: t('profile') || 'My Profile', icon: UserRound },
+    { id: 'restaurant', label: 'Restaurant Management', icon: Utensils },
+    { id: 'orchard', label: 'Orchard Management', icon: Trees },
   ];
 
   return (
