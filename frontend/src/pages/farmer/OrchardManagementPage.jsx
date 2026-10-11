@@ -1,0 +1,26 @@
+import React, { useEffect, useState } from 'react';
+import { apiRequest } from '../../services/apiClient';
+import { Trees, CalendarDays, Eye, Sprout, RefreshCw, Plus, Trash2 } from 'lucide-react';
+
+const sections=[{id:'plots',label:'Orchard Plots',icon:Trees},{id:'activities',label:'Activities',icon:CalendarDays},{id:'observations',label:'Observations',icon:Eye},{id:'harvests',label:'Harvest Records',icon:Sprout}];
+const empty={name:'',crop:'',area_acres:'',plant_count:'',activity:'',activity_date:'',observation:'',harvest_quantity_kg:'',notes:''};
+export default function OrchardManagementPage(){
+ const [section,setSection]=useState('plots'),[records,setRecords]=useState([]),[form,setForm]=useState(empty),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function load(){setBusy(true);setError('');try{const r=await apiRequest('/orchards/'+section);setRecords(r.data||[])}catch(e){setError(e.message||'Could not load orchard records.')}finally{setBusy(false)}}
+ useEffect(()=>{load()},[section]);
+ async function add(e){e.preventDefault();setError('');try{const p={...form,area_acres:form.area_acres===''?null:Number(form.area_acres),plant_count:form.plant_count===''?null:Number(form.plant_count),harvest_quantity_kg:form.harvest_quantity_kg===''?null:Number(form.harvest_quantity_kg)};const r=await apiRequest('/orchards/'+section,{method:'POST',body:JSON.stringify(p)});setRecords(old=>[r.data,...old]);setForm(empty)}catch(e){setError(e.message||'Could not save orchard record.')}}
+ async function remove(id){try{await apiRequest('/orchards/'+section+'/'+id,{method:'DELETE'});setRecords(old=>old.filter(x=>x.record_id!==id))}catch(e){setError(e.message||'Could not delete record.')}}
+ const input={padding:10,border:'1px solid #cbd5e1',borderRadius:9,width:'100%',boxSizing:'border-box'};
+ return <section style={{display:'grid',gap:18}}><header><h1>Integrated Orchard Management</h1><p>Manage orchard plots, crop activities, observations, and harvest records.</p></header>
+ <nav style={{display:'flex',gap:8,flexWrap:'wrap'}}>{sections.map(s=>{const I=s.icon;return <button key={s.id} onClick={()=>setSection(s.id)} style={{padding:10,border:0,borderRadius:9,background:section===s.id?'#047857':'#e2e8f0',color:section===s.id?'white':'#0f172a'}}><I size={16} style={{verticalAlign:'middle',marginRight:6}}/>{s.label}</button>})}<button onClick={load} disabled={busy} aria-label="Refresh"><RefreshCw size={16}/></button></nav>
+ {error&&<p role="alert" style={{color:'#b91c1c'}}>{error}</p>}
+ <form onSubmit={add} style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10,padding:16,border:'1px solid #e2e8f0',borderRadius:14}}>
+ <input required aria-label="Name" placeholder={section==='plots'?'Plot name / ID':'Record title'} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} style={input}/>
+ <input aria-label="Crop" placeholder="Crop / fruit type" value={form.crop} onChange={e=>setForm({...form,crop:e.target.value})} style={input}/>
+ {section==='plots'&&<><input aria-label="Area acres" type="number" min="0" step="any" placeholder="Area (acres)" value={form.area_acres} onChange={e=>setForm({...form,area_acres:e.target.value})} style={input}/><input aria-label="Plant count" type="number" min="0" placeholder="Plant count" value={form.plant_count} onChange={e=>setForm({...form,plant_count:e.target.value})} style={input}/></>}
+ {section==='activities'&&<><input aria-label="Activity" placeholder="Watering / pruning / fertilizing" value={form.activity} onChange={e=>setForm({...form,activity:e.target.value})} style={input}/><input aria-label="Activity date" type="date" value={form.activity_date} onChange={e=>setForm({...form,activity_date:e.target.value})} style={input}/></>}
+ {section==='observations'&&<input aria-label="Observation" placeholder="Observation details" value={form.observation} onChange={e=>setForm({...form,observation:e.target.value})} style={input}/>}
+ {section==='harvests'&&<input aria-label="Harvest quantity (kg)" type="number" min="0" step="any" placeholder="Harvest quantity (kg)" value={form.harvest_quantity_kg} onChange={e=>setForm({...form,harvest_quantity_kg:e.target.value})} style={input}/>}
+ <input aria-label="Notes" placeholder="Additional notes" value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} style={input}/><button type="submit" style={{background:'#047857',color:'white',border:0,borderRadius:9,padding:11}}><Plus size={16} style={{verticalAlign:'middle',marginRight:5}}/>Add record</button></form>
+ <div style={{display:'grid',gap:10}}>{busy?<p>Loading…</p>:records.length===0?<p>No records yet.</p>:records.map(r=><article key={r.record_id} style={{display:'flex',justifyContent:'space-between',gap:12,padding:14,border:'1px solid #e2e8f0',borderRadius:12}}><div><strong>{r.name}</strong><p>{[r.crop,r.area_acres!=null?String(r.area_acres)+' acres':'',r.plant_count!=null?String(r.plant_count)+' plants':'',r.activity,r.activity_date,r.observation,r.harvest_quantity_kg!=null?String(r.harvest_quantity_kg)+' kg harvested':'',r.notes].filter(Boolean).join(' · ')}</p><small>Added {r.created_at?new Date(r.created_at).toLocaleDateString():''}</small></div><button aria-label="Delete record" onClick={()=>remove(r.record_id)}><Trash2 size={16}/></button></article>)}</div></section>;
+}
